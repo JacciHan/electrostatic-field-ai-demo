@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>清华附中 | 静电场 AI 可视化实验室</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-logo" src="./qhfz-logo.png" alt="清华大学附属中学">
+      <div class="brand-subtitle">静电场 AI 可视化实验室</div>
+    </div>
+    <div class="lesson-tag">导体如何重塑电场</div>
+  </header>
+
+  <main class="shell">
+    <aside class="panel controls" aria-label="课堂控制">
+      <section>
+        <h2>场景</h2>
+        <div class="segmented" role="tablist" aria-label="选择场景">
+          <button class="segment active" data-scene="solid">实心导体</button>
+          <button class="segment" data-scene="shield">空腔屏蔽</button>
+          <button class="segment" data-scene="cavity">腔内电荷</button>
+          <button class="segment" data-scene="tip">尖端效应</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>课堂模式</h2>
+        <button id="modeToggle" class="primary-action">进入预测模式</button>
+        <p class="hint">预测模式会隐藏感应电荷与电场线，适合先让学生判断。</p>
+      </section>
+
+      <section>
+        <h2>显示内容</h2>
+        <label class="switch-row">
+          <input id="showCharges" type="checkbox" checked>
+          <span>表面感应电荷</span>
+        </label>
+        <label class="switch-row">
+          <input id="showLines" type="checkbox" checked>
+          <span>电场线模型</span>
+        </label>
+        <label class="switch-row">
+          <input id="showLabels" type="checkbox" checked>
+          <span>关键物理标注</span>
+        </label>
+      </section>
+
+      <section>
+        <h2>电荷</h2>
+        <div class="charge-actions">
+          <button id="positiveBtn" class="charge-btn active">正电荷</button>
+          <button id="negativeBtn" class="charge-btn">负电荷</button>
+        </div>
+        <button id="resetBtn" class="secondary-action">重置位置</button>
+      </section>
+    </aside>
+
+    <section class="stage-wrap" aria-label="静电场可视化画布">
+      <div class="stage-header">
+        <div>
+          <h1 id="sceneTitle">实心导体靠近外部电荷</h1>
+          <p id="sceneLead">拖动点电荷，观察导体表面电荷重新分布与内部电场为零。</p>
+        </div>
+        <div class="status-pill" id="statusPill">模型显示中</div>
+      </div>
+      <div class="canvas-card">
+        <canvas id="fieldCanvas" width="1120" height="700"></canvas>
+      </div>
+    </section>
+
+    <aside class="panel ai-panel" aria-label="AI助教">
+      <section>
+        <div class="ai-title">
+          <span class="ai-dot"></span>
+          <h2>AI 助教诊断</h2>
+        </div>
+        <p id="aiSummary" class="ai-summary"></p>
+      </section>
+
+      <section>
+        <h2>观察要点</h2>
+        <ul id="studentChecks" class="check-list"></ul>
+      </section>
+
+      <section>
+        <h2>模型自检</h2>
+        <ul id="physicsChecks" class="check-list"></ul>
+      </section>
+    </aside>
+  </main>
+
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+*.png
+!qhfz-logo.png
+check-*.png
+screenshot-*.png
+.DS_Store
