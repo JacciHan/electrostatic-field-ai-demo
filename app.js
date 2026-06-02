@@ -34,11 +34,22 @@ const fieldLineConfig = {
   maxBoundaryLines: 24
 };
 
+const surfaceChargeScales = {
+  solid: 0.065,
+  shield: 0.07,
+  cavity: 0.095
+};
+
 const sceneMeta = {
   solid: {
     title: "实心导体靠近外部电荷",
     lead: "拖动点电荷，观察导体表面电荷重新分布与内部电场为零。",
     question: "如果外部正电荷靠近导体左侧，导体左、右两侧分别会出现什么电荷？导体内部还有电场吗？"
+  },
+  charged: {
+    title: "带电球形导体：无外电场",
+    lead: "观察孤立带电球形导体的高对称情形：电荷均匀分布在外表面，球内电场为零。",
+    question: "没有外部电场时，为什么球形导体表面电荷可以均匀分布？球内部为什么没有电场？"
   },
   shield: {
     title: "带空腔导体：外部电荷靠近",
@@ -54,6 +65,11 @@ const sceneMeta = {
     title: "尖端效应：电荷密度与电场强弱",
     lead: "观察尖端附近电荷更密、电场线更密的定性模型。",
     question: "为什么避雷针和尖端放电都和“尖端附近电场更强”有关？"
+  },
+  dumbbell: {
+    title: "哑铃形导体：两个相连球形导体",
+    lead: "观察两个并排相连的圆钝导体，比较外侧凸起和连接区域的表面电荷密度。",
+    question: "两个球形导体连成同一个等势体后，表面电荷会更集中在哪些外轮廓位置？"
   }
 };
 
@@ -235,12 +251,31 @@ function getBemSolution() {
   vector[n] = 0;
 
   const solved = solveLinearSystem(matrix, vector);
-  const charges = solved.slice(0, n);
+  const charges = applyPhysicalChargeCorrections(boundaries, solved.slice(0, n));
   const conductorPotential = solved[n];
   const solution = { boundaries, charges, conductorPotential, sources, geometry };
   bemCache.key = key;
   bemCache.solution = solution;
   return solution;
+}
+
+function applyPhysicalChargeCorrections(boundaries, charges) {
+  const corrected = [...charges];
+  if (state.scene === "shield") {
+    boundaries.forEach((boundary, index) => {
+      if (boundary.role === "inner") corrected[index] = 0;
+    });
+  }
+  if (state.scene === "cavity") {
+    const outerIndices = boundaries
+      .map((boundary, index) => boundary.role === "outer" ? index : -1)
+      .filter(index => index >= 0);
+    const outerMean = outerIndices.reduce((sum, index) => sum + corrected[index], 0) / outerIndices.length;
+    outerIndices.forEach((index) => {
+      corrected[index] = outerMean;
+    });
+  }
+  return corrected;
 }
 
 function fieldAt(point, solution) {
@@ -274,7 +309,8 @@ function setScene(scene) {
     history.replaceState(null, "", `#${scene}`);
   }
   if (scene === "cavity") state.charge = { x: 0.5, y: 0.48 };
-  if (scene === "tip") state.charge = { x: 0.26, y: 0.5 };
+  if (scene === "charged") state.charge = { x: 0.56, y: 0.5 };
+  if (scene === "tip" || scene === "dumbbell") state.charge = { x: 0.26, y: 0.5 };
   if (scene === "solid" || scene === "shield") state.charge = { x: 0.23, y: 0.5 };
   document.querySelectorAll(".segment").forEach((button) => {
     button.classList.toggle("active", button.dataset.scene === scene);
@@ -295,9 +331,11 @@ function updateText() {
   const signWord = state.chargeSign > 0 ? "正电荷" : "负电荷";
   const summaries = {
     solid: `当前外部${signWord}靠近实心导体。模型实时重算表面感应电荷，使导体内部合电场保持为零。`,
+    charged: `当前孤立球形导体带${signWord}。由于球面对称，净电荷均匀分布在外表面，内部合电场为零。`,
     shield: `当前外部${signWord}靠近带空腔导体。模型区分导体材料内部 E=0 与空腔区域是否受影响。`,
     cavity: `当前${signWord}位于空腔内。内表面出现异号感应电荷，分布随电荷位置连续改变。`,
-    tip: "当前为尖端效应定性模型，用于展示尖端附近电荷密度更高、电场更强。"
+    tip: "当前为尖端效应定性模型，用于展示尖端附近电荷密度更高、电场更强。",
+    dumbbell: "当前为哑铃形导体定性模型，用两个相连球形导体对比外侧凸起和连接区域的表面电荷密度差异。"
   };
   els.aiSummary.textContent = state.prediction
     ? "预测模式：隐藏模型结果，先判断感应电荷位置、导体内部电场和空腔区域电场。"
@@ -313,11 +351,17 @@ function getStudentChecks() {
   if (state.scene === "cavity") {
     return ["空腔内部可以有电场。", "导体材料内部保持 E=0。", "内表面异号电荷在靠近处更密。"];
   }
+  if (state.scene === "charged") {
+    return ["球面对称使表面电荷均匀分布。", "导体内部保持 E=0。", "外部电场线沿半径方向分布。"];
+  }
   if (state.scene === "shield") {
     return ["外部电荷只改变外表面分布。", "空腔内部不出现外部电场线。", "导体材料内部保持 E=0。"];
   }
   if (state.scene === "tip") {
     return ["尖端附近电荷点更密。", "电场线在尖端附近更集中。", "该场景用于定性解释尖端效应。"];
+  }
+  if (state.scene === "dumbbell") {
+    return ["外侧凸起处电荷较密。", "两球连接附近电荷较少。", "整体仍是同一个等势导体。"];
   }
   return ["近侧出现异号感应电荷。", "远侧出现同号感应电荷。", "导体内部保持 E=0。"];
 }
@@ -363,7 +407,7 @@ function draw() {
     if (!state.prediction && state.showLines) drawFieldLines();
     drawConductor();
     if (!state.prediction && state.showCharges) drawSurfaceCharges();
-    drawPointCharge();
+    if (!["charged", "tip", "dumbbell"].includes(state.scene)) drawPointCharge();
     if (state.showLabels) drawLabels();
     updatePhysicsDiagnostics(performance.now() - startedAt);
     if (needsVisualAnimation()) requestDraw();
@@ -420,7 +464,10 @@ function requestDraw() {
 function updatePhysicsDiagnostics(elapsedMs = 0) {
   if (!els.physicsChecks) return;
   if (!["solid", "shield", "cavity"].includes(state.scene)) {
-    renderList(els.physicsChecks, ["当前场景使用定性尖端模型。", "不作为边界电荷数值求解场景。"]);
+    const items = state.scene === "charged"
+      ? ["高对称解析图像：球面等势。", "表面电荷密度均匀。", "导体内部 E = 0。"]
+      : ["当前场景使用定性复杂导体模型。", "重点展示曲率、凸起与电场强弱关系。"];
+    renderList(els.physicsChecks, items);
     return;
   }
   const solution = getBemSolution();
@@ -436,11 +483,24 @@ function updatePhysicsDiagnostics(elapsedMs = 0) {
   const total = solution.charges.reduce((sum, value) => sum + value, 0);
   const outer = solution.charges.reduce((sum, value, index) => sum + (solution.boundaries[index].role === "outer" ? value : 0), 0);
   const inner = solution.charges.reduce((sum, value, index) => sum + (solution.boundaries[index].role === "inner" ? value : 0), 0);
-  const items = [
-    `边界等势最大误差：${maxError.toExponential(2)}`,
-    `导体净电荷约束：${total.toExponential(2)}`,
-    `求解与绘制耗时：${elapsedMs.toFixed(1)} ms`
-  ];
+  const items = [];
+  if (state.scene === "solid") {
+    items.push(`边界等势最大误差：${maxError.toExponential(2)}`);
+    items.push(`导体净电荷约束：${total.toExponential(2)}`);
+  } else if (state.scene === "shield") {
+    const innerMax = Math.max(...solution.charges.map((value, index) => (
+      solution.boundaries[index].role === "inner" ? Math.abs(value) : 0
+    )));
+    items.push(`屏蔽约束：内表面最大电荷 ${innerMax.toExponential(2)}`);
+    items.push(`导体净电荷约束：${total.toExponential(2)}`);
+  } else if (state.scene === "cavity") {
+    const outerCharges = solution.charges.filter((value, index) => solution.boundaries[index].role === "outer");
+    const outerMean = outerCharges.reduce((sum, value) => sum + value, 0) / outerCharges.length;
+    const outerDeviation = Math.max(...outerCharges.map(value => Math.abs(value - outerMean)));
+    items.push(`外表面均匀偏差：${outerDeviation.toExponential(2)}`);
+    items.push(`导体净电荷约束：${total.toExponential(2)}`);
+  }
+  items.push(`求解与绘制耗时：${elapsedMs.toFixed(1)} ms`);
   if (state.scene !== "solid") {
     items.push(`外表面总电荷：${outer.toFixed(3)}`);
     items.push(`内表面总电荷：${inner.toFixed(3)}`);
@@ -449,10 +509,12 @@ function updatePhysicsDiagnostics(elapsedMs = 0) {
 }
 
 function drawConductor() {
-  if (state.scene === "solid") {
+  if (state.scene === "solid" || state.scene === "charged") {
     drawDisk(0.56, 0.5, 0.2);
   } else if (state.scene === "shield" || state.scene === "cavity") {
     drawShell();
+  } else if (state.scene === "dumbbell") {
+    drawDumbbellConductor();
   } else {
     drawTipConductor();
   }
@@ -519,6 +581,33 @@ function drawTipConductor() {
   ctx.restore();
 }
 
+function drawDumbbellConductor() {
+  ctx.save();
+  const left = { x: 0.45, y: 0.5, r: 0.17 };
+  const right = { x: 0.65, y: 0.5, r: 0.17 };
+  const joinAngle = Math.acos((right.x - left.x) / (2 * left.r));
+  const grad = ctx.createLinearGradient(sx(0.28), sy(0.36), sx(0.82), sy(0.5));
+  grad.addColorStop(0, "#f2f6f8");
+  grad.addColorStop(0.62, "#d9e1e6");
+  grad.addColorStop(1, "#c4ced6");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(sx(left.x), sy(left.y), sx(left.r), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(sx(right.x), sy(right.y), sx(right.r), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#7f8e99";
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(sx(left.x), sy(left.y), sx(left.r), joinAngle, Math.PI * 2 - joinAngle);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(sx(right.x), sy(right.y), sx(right.r), Math.PI + joinAngle, Math.PI - joinAngle);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawPointCharge() {
   const x = sx(state.charge.x);
   const y = sy(state.charge.y);
@@ -545,18 +634,31 @@ function drawPointCharge() {
 function drawSurfaceCharges() {
   if (["solid", "shield", "cavity"].includes(state.scene)) {
     drawBemSurfaceCharges();
+  } else if (state.scene === "charged") {
+    drawChargedSphereCharges();
+  } else if (state.scene === "dumbbell") {
+    drawDumbbellCharges();
   } else {
     drawTipCharges();
+  }
+}
+
+function drawChargedSphereCharges() {
+  const count = 36;
+  for (let i = 0; i < count; i += 1) {
+    const angle = (Math.PI * 2 * i) / count;
+    const point = circlePoint(0.56, 0.5, 0.2, angle, 0.009);
+    drawSurfaceDot(point.x, point.y, state.chargeSign, 4.6);
   }
 }
 
 function drawBemSurfaceCharges() {
   const solution = getBemSolution();
   const charges = visualState.charges.length === solution.charges.length ? visualState.charges : solution.charges;
-  const maxAbs = Math.max(...charges.map(charge => Math.abs(charge)), 1e-6);
+  const scale = surfaceChargeScales[state.scene] || Math.max(...solution.charges.map(charge => Math.abs(charge)), 1e-6);
   solution.boundaries.forEach((boundary, index) => {
     const q = charges[index];
-    const strength = Math.abs(q) / maxAbs;
+    const strength = clamp(Math.abs(q) / scale, 0, 1.15);
     if (strength < 0.055) return;
     const offset = boundary.role === "inner" ? 0.012 : 0.008;
     const point = circlePoint(boundary.cx, boundary.cy, boundary.r, boundary.angle, offset);
@@ -588,11 +690,33 @@ function drawCircularCharges(cx, cy, r, inner, uniformOuter = false) {
 
 function drawTipCharges() {
   const points = [
-    [0.70, 0.5, 1.4], [0.66, 0.45, 1.1], [0.66, 0.55, 1.1],
-    [0.58, 0.38, 0.8], [0.58, 0.62, 0.8], [0.47, 0.34, 0.6],
-    [0.47, 0.66, 0.6], [0.37, 0.46, 0.55], [0.37, 0.54, 0.55]
+    [0.705, 0.5, 1.85], [0.682, 0.47, 1.48], [0.682, 0.53, 1.48],
+    [0.646, 0.435, 1.12], [0.646, 0.565, 1.12],
+    [0.59, 0.385, 0.78], [0.59, 0.615, 0.78],
+    [0.515, 0.345, 0.58], [0.515, 0.655, 0.58],
+    [0.435, 0.355, 0.46], [0.435, 0.645, 0.46],
+    [0.36, 0.45, 0.42], [0.36, 0.55, 0.42]
   ];
   points.forEach(([x, y, size]) => drawSurfaceDot(x, y, state.chargeSign, 4 + size * 3.2));
+}
+
+function drawDumbbellCharges() {
+  const left = { x: 0.45, y: 0.5, r: 0.17 };
+  const right = { x: 0.65, y: 0.5, r: 0.17 };
+  const joinAngle = Math.acos((right.x - left.x) / (2 * left.r));
+  const seamGap = 0.075;
+  const drawArcCharges = (center, start, end, densityFn) => {
+    const count = 17;
+    for (let i = 0; i < count; i += 1) {
+      const t = count === 1 ? 0 : i / (count - 1);
+      const angle = start + (end - start) * t;
+      const p = circlePoint(center.x, center.y, center.r, angle, 0.009);
+      const density = densityFn(angle);
+      drawSurfaceDot(p.x, p.y, state.chargeSign, 3.2 + density * 4.6);
+    }
+  };
+  drawArcCharges(left, joinAngle + seamGap, Math.PI * 2 - joinAngle - seamGap, angle => 0.28 + 0.85 * Math.max(0, -Math.cos(angle)));
+  drawArcCharges(right, -Math.PI + joinAngle + seamGap, Math.PI - joinAngle - seamGap, angle => 0.28 + 0.85 * Math.max(0, Math.cos(angle)));
 }
 
 function drawSurfaceDot(x, y, sign, radius) {
@@ -618,12 +742,141 @@ function drawFieldLines() {
   ctx.lineCap = "round";
   if (["solid", "shield", "cavity"].includes(state.scene)) {
     drawBemFieldLines();
+  } else if (state.scene === "charged") {
+    drawChargedSphereFieldLines();
+  } else if (state.scene === "dumbbell") {
+    drawDumbbellFieldLines();
   } else {
-    for (let i = -3; i <= 3; i += 1) {
-      drawCubic({ x: 0.72, y: 0.5 }, { x: 0.82, y: 0.5 + i * 0.055 }, { x: 0.93, y: 0.5 + i * 0.095 }, { x: 1.03, y: 0.5 + i * 0.13 }, true);
-    }
+    drawTipFieldLines();
   }
   ctx.restore();
+}
+
+function drawChargedSphereFieldLines() {
+  const outward = state.chargeSign > 0;
+  const count = 18;
+  for (let i = 0; i < count; i += 1) {
+    const angle = (Math.PI * 2 * i) / count;
+    const start = circlePoint(0.56, 0.5, 0.2, angle, 0.016);
+    const end = circlePoint(0.56, 0.5, 0.2, angle, 0.19);
+    drawStraight(outward ? start : end, outward ? end : start);
+  }
+}
+
+function drawTipFieldLines() {
+  const outward = state.chargeSign > 0;
+  const upper = [
+    { x: 0.72, y: 0.5 },
+    { x: 0.56, y: 0.29 },
+    { x: 0.36, y: 0.31 },
+    { x: 0.34, y: 0.5 }
+  ];
+  const lower = [
+    { x: 0.34, y: 0.5 },
+    { x: 0.36, y: 0.69 },
+    { x: 0.56, y: 0.71 },
+    { x: 0.72, y: 0.5 }
+  ];
+  const lines = [
+    { curve: upper, t: 0.025, length: 0.34 },
+    { curve: upper, t: 0.08, length: 0.32 },
+    { curve: upper, t: 0.18, length: 0.29 },
+    { curve: upper, t: 0.36, length: 0.25 },
+    { curve: upper, t: 0.68, length: 0.21 },
+    { curve: lower, t: 0.975, length: 0.34 },
+    { curve: lower, t: 0.92, length: 0.32 },
+    { curve: lower, t: 0.82, length: 0.29 },
+    { curve: lower, t: 0.64, length: 0.25 },
+    { curve: lower, t: 0.32, length: 0.21 }
+  ];
+  lines.forEach(({ curve, t, length }) => drawNormalFieldLine(curve, t, length, outward));
+  drawCubic(
+    { x: 0.72, y: 0.5 },
+    { x: 0.83, y: 0.5 },
+    { x: 0.94, y: 0.5 },
+    { x: 1.03, y: 0.5 },
+    outward
+  );
+}
+
+function drawDumbbellFieldLines() {
+  const outward = state.chargeSign > 0;
+  const lines = [
+    { center: { x: 0.45, y: 0.5 }, r: 0.17, angle: Math.PI, length: 0.34 },
+    { center: { x: 0.45, y: 0.5 }, r: 0.17, angle: Math.PI * 0.78, length: 0.31 },
+    { center: { x: 0.45, y: 0.5 }, r: 0.17, angle: -Math.PI * 0.78, length: 0.31 },
+    { center: { x: 0.45, y: 0.5 }, r: 0.17, angle: Math.PI * 0.58, length: 0.27 },
+    { center: { x: 0.45, y: 0.5 }, r: 0.17, angle: -Math.PI * 0.58, length: 0.27 },
+    { center: { x: 0.65, y: 0.5 }, r: 0.17, angle: 0, length: 0.34 },
+    { center: { x: 0.65, y: 0.5 }, r: 0.17, angle: Math.PI * 0.22, length: 0.31 },
+    { center: { x: 0.65, y: 0.5 }, r: 0.17, angle: -Math.PI * 0.22, length: 0.31 },
+    { center: { x: 0.65, y: 0.5 }, r: 0.17, angle: Math.PI * 0.42, length: 0.27 },
+    { center: { x: 0.65, y: 0.5 }, r: 0.17, angle: -Math.PI * 0.42, length: 0.27 }
+  ];
+  lines.forEach(({ center, r, angle, length }) => {
+    const start = circlePoint(center.x, center.y, r, angle, 0.014);
+    const end = circlePoint(center.x, center.y, r, angle, length);
+    const c1 = circlePoint(center.x, center.y, r, angle, 0.09);
+    const c2 = circlePoint(center.x, center.y, r, angle, length * 0.72);
+    drawCubic(start, c1, c2, end, outward);
+  });
+}
+
+function drawNormalFieldLine(curve, t, length, outward) {
+  const start = cubicPointOnCurve(curve, t);
+  const tangent = cubicTangentOnCurve(curve, t);
+  const normal = outwardPixelNormal(start, tangent);
+  const pixelLength = length * canvas.width;
+  const c1 = movePointByPixelVector(start, normal, 30);
+  const c2 = movePointByPixelVector(start, normal, pixelLength * 0.72);
+  const end = movePointByPixelVector(start, normal, pixelLength);
+  drawCubic(start, c1, c2, end, outward);
+}
+
+function cubicPointOnCurve(curve, t) {
+  const u = 1 - t;
+  return {
+    x: u ** 3 * curve[0].x + 3 * u ** 2 * t * curve[1].x + 3 * u * t ** 2 * curve[2].x + t ** 3 * curve[3].x,
+    y: u ** 3 * curve[0].y + 3 * u ** 2 * t * curve[1].y + 3 * u * t ** 2 * curve[2].y + t ** 3 * curve[3].y
+  };
+}
+
+function cubicTangentOnCurve(curve, t) {
+  const u = 1 - t;
+  return {
+    x: 3 * u ** 2 * (curve[1].x - curve[0].x) + 6 * u * t * (curve[2].x - curve[1].x) + 3 * t ** 2 * (curve[3].x - curve[2].x),
+    y: 3 * u ** 2 * (curve[1].y - curve[0].y) + 6 * u * t * (curve[2].y - curve[1].y) + 3 * t ** 2 * (curve[3].y - curve[2].y)
+  };
+}
+
+function outwardPixelNormal(point, tangent) {
+  const pxTangent = {
+    x: tangent.x * canvas.width,
+    y: tangent.y * canvas.height
+  };
+  const len = Math.hypot(pxTangent.x, pxTangent.y) || 1;
+  const tx = pxTangent.x / len;
+  const ty = pxTangent.y / len;
+  const candidates = [
+    { x: -ty, y: tx },
+    { x: ty, y: -tx }
+  ];
+  const fromCenter = {
+    x: sx(point.x) - sx(0.52),
+    y: sy(point.y) - sy(0.5)
+  };
+  const normal = candidates[0].x * fromCenter.x + candidates[0].y * fromCenter.y >
+    candidates[1].x * fromCenter.x + candidates[1].y * fromCenter.y
+    ? candidates[0]
+    : candidates[1];
+  return normal;
+}
+
+function movePointByPixelVector(point, vector, distance) {
+  return {
+    x: (sx(point.x) + vector.x * distance) / canvas.width,
+    y: (sy(point.y) + vector.y * distance) / canvas.height
+  };
 }
 
 function drawBemFieldLines() {
@@ -631,7 +884,7 @@ function drawBemFieldLines() {
   const lineSolution = makeLineSolution(solution);
   const reverseArrows = solution.sources[0].q < 0;
   const seeds = makeFieldSeeds(lineSolution);
-  seeds.forEach(seed => traceFieldLine(seed.point, lineSolution, seed.direction, reverseArrows));
+  drawSymmetricFieldPaths(seeds, lineSolution, reverseArrows);
   if (state.scene === "cavity") {
     const outerCharge = solution.charges.reduce((sum, value, index) => (
       solution.boundaries[index].role === "outer" ? sum + value : sum
@@ -639,6 +892,22 @@ function drawBemFieldLines() {
     const count = state.dragging ? 8 : 12;
     drawOuterRadialLines(0.56, 0.5, 0.24, count, outerCharge >= 0);
   }
+}
+
+function drawSymmetricFieldPaths(seeds, solution, reverseArrows) {
+  const axis = pixelAngle(0.56, 0.5, state.charge);
+  const epsilon = 0.0008;
+  seeds.forEach((seed) => {
+    const side = sideOfAxis(seed.point, axis);
+    if (side < -epsilon) return;
+    const path = traceFieldPath(seed.point, solution, seed.direction);
+    if (side <= epsilon) {
+      drawFieldPath(path.map(point => projectOntoAxis(point, axis)), reverseArrows);
+    } else {
+      drawFieldPath(path, reverseArrows);
+      drawFieldPath(path.map(point => reflectAcrossAxis(point, axis)), reverseArrows);
+    }
+  });
 }
 
 function makeLineSolution(solution) {
@@ -681,6 +950,7 @@ function makeFieldSeeds(solution) {
 
 function makeBoundaryFluxSeeds(solution, budget) {
   if (budget <= 0) return [];
+  if (hasAxisymmetricBoundarySeeds()) return makeSymmetricBoundaryFluxSeeds(solution, budget);
   const candidates = [];
   solution.boundaries.forEach((boundary, index) => {
     const q = solution.charges[index];
@@ -725,13 +995,93 @@ function makeBoundaryFluxSeeds(solution, budget) {
     .slice(0, budget);
 }
 
+function hasAxisymmetricBoundarySeeds() {
+  return ["solid", "shield", "cavity"].includes(state.scene);
+}
+
+function makeSymmetricBoundaryFluxSeeds(solution, budget) {
+  const center = { x: 0.56, y: 0.5 };
+  const axisAngle = pixelAngle(center.x, center.y, state.charge);
+  const roles = ["outer", "inner"]
+    .map(role => makeSymmetricRoleSeedPlan(solution, role, axisAngle))
+    .filter(plan => plan && plan.flux > 0)
+    .sort((a, b) => b.flux - a.flux);
+  if (!roles.length) return [];
+  const seeds = [];
+  let remaining = budget;
+  const totalFlux = roles.reduce((sum, role) => sum + role.flux, 0);
+  roles.forEach((role, index) => {
+    const target = index === roles.length - 1
+      ? remaining
+      : Math.max(0, Math.round((role.flux / totalFlux) * budget));
+    const count = Math.min(remaining, target);
+    seeds.push(...makeSymmetricRoleSeeds(role, count));
+    remaining = budget - seeds.length;
+  });
+  return seeds
+    .sort((a, b) => angularDistance(pixelAngle(0.56, 0.5, a.point), axisAngle) - angularDistance(pixelAngle(0.56, 0.5, b.point), axisAngle))
+    .slice(0, budget);
+}
+
+function makeSymmetricRoleSeedPlan(solution, role, axisAngle) {
+  const entries = solution.boundaries
+    .map((boundary, index) => ({ boundary, index, flux: Math.max(0, solution.charges[index]) }))
+    .filter(entry => entry.boundary.role === role && entry.flux > 0);
+  if (!entries.length) return null;
+  const flux = entries.reduce((sum, entry) => sum + entry.flux, 0);
+  const strongest = entries.reduce((best, entry) => entry.flux > best.flux ? entry : best, entries[0]);
+  const oppositeAxis = normalizeAngle(axisAngle + Math.PI);
+  const centerAngle = angularDistance(strongest.boundary.angle, axisAngle) <= angularDistance(strongest.boundary.angle, oppositeAxis)
+    ? axisAngle
+    : oppositeAxis;
+  return {
+    role,
+    flux,
+    centerAngle,
+    template: entries[0].boundary
+  };
+}
+
+function makeSymmetricRoleSeeds(plan, requestedCount) {
+  if (requestedCount <= 0) return [];
+  const seeds = [makeBoundarySeedAtAngle(plan.template, plan.centerAngle)];
+  const pairCount = Math.floor((requestedCount - 1) / 2);
+  const spread = Math.PI * 0.62;
+  for (let i = 1; i <= pairCount; i += 1) {
+    const delta = (spread * i) / (pairCount + 0.5);
+    seeds.push(makeBoundarySeedAtAngle(plan.template, plan.centerAngle + delta));
+    seeds.push(makeBoundarySeedAtAngle(plan.template, plan.centerAngle - delta));
+  }
+  return seeds;
+}
+
+function makeBoundarySeedAtAngle(boundary, angle) {
+  const outward = boundary.role === "outer" ? 1 : -1;
+  const offset = boundary.role === "outer" ? 0.02 : -0.014;
+  return {
+    point: circlePoint(boundary.cx, boundary.cy, boundary.r, angle, offset),
+    direction: outward
+  };
+}
+
+function normalizeAngle(angle) {
+  const full = Math.PI * 2;
+  return ((angle % full) + full) % full;
+}
+
+function angularDistance(a, b) {
+  const diff = Math.abs(normalizeAngle(a) - normalizeAngle(b));
+  return Math.min(diff, Math.PI * 2 - diff);
+}
+
 function traceFieldLine(seed, solution, direction, reverseArrow = false) {
+  drawFieldPath(traceFieldPath(seed, solution, direction), reverseArrow);
+}
+
+function traceFieldPath(seed, solution, direction) {
   let point = { ...seed };
-  ctx.beginPath();
-  ctx.moveTo(sx(point.x), sy(point.y));
+  const path = [point];
   let last = point;
-  let arrowPoint = null;
-  let arrowAngle = 0;
   for (let step = 0; step < 260; step += 1) {
     const field = fieldAt(point, solution);
     const mag = Math.hypot(field.x, field.y);
@@ -743,17 +1093,63 @@ function traceFieldLine(seed, solution, direction, reverseArrow = false) {
     const next = fromPhys(nextPhys);
     if (next.x < 0.01 || next.x > 0.99 || next.y < 0.02 || next.y > 0.98) break;
     if (isInConductor(next, solution)) break;
-    ctx.lineTo(sx(next.x), sy(next.y));
-    if (step === 28) {
-      arrowPoint = next;
-      arrowAngle = Math.atan2(sy(next.y) - sy(last.y), sx(next.x) - sx(last.x));
-    }
+    path.push(next);
     last = next;
     point = next;
     if (physDistance(point, solution.sources[0]) < 0.018) break;
   }
+  return path;
+}
+
+function drawFieldPath(path, reverseArrow = false) {
+  if (path.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(sx(path[0].x), sy(path[0].y));
+  for (let i = 1; i < path.length; i += 1) {
+    ctx.lineTo(sx(path[i].x), sy(path[i].y));
+  }
   ctx.stroke();
-  if (arrowPoint) drawArrowhead(arrowPoint.x, arrowPoint.y, arrowAngle + (reverseArrow ? Math.PI : 0));
+  const arrowIndex = Math.min(28, path.length - 1);
+  if (arrowIndex < 1) return;
+  const arrowPoint = path[arrowIndex];
+  const before = path[arrowIndex - 1];
+  const arrowAngle = Math.atan2(sy(arrowPoint.y) - sy(before.y), sx(arrowPoint.x) - sx(before.x));
+  drawArrowhead(arrowPoint.x, arrowPoint.y, arrowAngle + (reverseArrow ? Math.PI : 0));
+}
+
+function sideOfAxis(point, axisAngle) {
+  const origin = { x: sx(0.56), y: sy(0.5) };
+  const px = sx(point.x) - origin.x;
+  const py = sy(point.y) - origin.y;
+  return Math.cos(axisAngle) * py - Math.sin(axisAngle) * px;
+}
+
+function reflectAcrossAxis(point, axisAngle) {
+  const origin = { x: sx(0.56), y: sy(0.5) };
+  const px = sx(point.x) - origin.x;
+  const py = sy(point.y) - origin.y;
+  const ux = Math.cos(axisAngle);
+  const uy = Math.sin(axisAngle);
+  const projection = px * ux + py * uy;
+  const rx = 2 * projection * ux - px;
+  const ry = 2 * projection * uy - py;
+  return {
+    x: (origin.x + rx) / canvas.width,
+    y: (origin.y + ry) / canvas.height
+  };
+}
+
+function projectOntoAxis(point, axisAngle) {
+  const origin = { x: sx(0.56), y: sy(0.5) };
+  const px = sx(point.x) - origin.x;
+  const py = sy(point.y) - origin.y;
+  const ux = Math.cos(axisAngle);
+  const uy = Math.sin(axisAngle);
+  const projection = px * ux + py * uy;
+  return {
+    x: (origin.x + projection * ux) / canvas.width,
+    y: (origin.y + projection * uy) / canvas.height
+  };
 }
 
 function drawOuterRadialLines(cx, cy, r, count, outward = true) {
@@ -813,14 +1209,22 @@ function drawLabels() {
   }
   if (state.scene === "solid") {
     drawBadge(0.56, 0.5, "导体内部 E = 0", "#334155");
+  } else if (state.scene === "charged") {
+    drawBadge(0.56, 0.5, "球内 E = 0", "#334155");
+    drawBadge(0.56, 0.25, "表面电荷均匀分布", "#334155");
   } else if (state.scene === "shield") {
     drawBadge(0.56, 0.5, "空腔内不受外部静电场影响", "#334155");
     drawBadge(0.56, 0.29, "外表面重新分布", "#334155");
   } else if (state.scene === "cavity") {
     drawBadge(0.56, 0.28, "导体材料内部 E = 0", "#334155");
     drawBadge(0.56, 0.69, "内表面：异号感应电荷", "#334155");
-  } else {
-    drawBadge(0.74, 0.42, "尖端附近电场更强", "#334155");
+  } else if (state.scene === "tip") {
+    drawBadge(0.76, 0.42, "尖端附近电场更强", "#334155");
+    drawBadge(0.5, 0.68, "同一导体表面电荷不均匀", "#334155");
+  } else if (state.scene === "dumbbell") {
+    drawBadge(0.31, 0.42, "左侧外凸面", "#334155");
+    drawBadge(0.74, 0.42, "右侧外凸面", "#334155");
+    drawBadge(0.55, 0.66, "相连等势整体", "#334155");
   }
 }
 
@@ -925,6 +1329,9 @@ els.negativeBtn.addEventListener("click", () => {
 document.querySelector("#resetBtn").addEventListener("click", () => setScene(state.scene));
 
 function constrainCharge(point) {
+  if (state.scene === "charged") {
+    return { x: 0.56, y: 0.5 };
+  }
   if (state.scene === "cavity") {
     const cx = 0.56;
     const cy = 0.5;
@@ -964,7 +1371,7 @@ function constrainCharge(point) {
   };
 }
 
-const initialScene = ["solid", "shield", "cavity", "tip"].includes(location.hash.slice(1))
+const initialScene = ["solid", "charged", "shield", "cavity", "tip", "dumbbell"].includes(location.hash.slice(1))
   ? location.hash.slice(1)
   : state.scene;
 setScene(initialScene);
