@@ -6,6 +6,7 @@ const state = {
   prediction: false,
   showCharges: true,
   showLines: true,
+  showEquipotentials: true,
   showLabels: true,
   chargeSign: 1,
   charge: { x: 0.23, y: 0.5 },
@@ -83,6 +84,7 @@ const els = {
   modeToggle: document.querySelector("#modeToggle"),
   showCharges: document.querySelector("#showCharges"),
   showLines: document.querySelector("#showLines"),
+  showEquipotentials: document.querySelector("#showEquipotentials"),
   showLabels: document.querySelector("#showLabels"),
   positiveBtn: document.querySelector("#positiveBtn"),
   negativeBtn: document.querySelector("#negativeBtn")
@@ -408,6 +410,19 @@ function fieldAt(point, solution) {
   return { x: ex, y: ey };
 }
 
+function potentialAt(point, solution) {
+  let value = sourcePotential(point, solution.sources);
+  solution.boundaries.forEach((boundary, index) => {
+    value += solution.charges[index] * green(point, boundary);
+  });
+  return value;
+}
+
+function isDrawablePotentialPoint(point, solution) {
+  if (isInConductor(point, solution)) return false;
+  return !solution.sources.some(source => physDistance(point, source) < 0.03);
+}
+
 function isInConductor(point, solution) {
   const conductor = solution.geometry.conductors[0];
   if (conductor.type === "polygon") return pointInPolygon(point, conductor.polygon);
@@ -527,6 +542,7 @@ function draw() {
     const solution = getBemSolution();
     advanceVisualState(solution);
     clearCanvas();
+    if (!state.prediction && state.showEquipotentials) drawEquipotentialLines();
     if (!state.prediction && state.showLines) drawFieldLines();
     drawConductor();
     if (!state.prediction && state.showCharges) drawSurfaceCharges();
@@ -775,6 +791,98 @@ function drawSurfaceDot(x, y, sign, radius) {
   ctx.lineWidth = 1.2;
   ctx.stroke();
   ctx.restore();
+}
+
+function drawEquipotentialLines() {
+  const solution = getBemSolution();
+  const grid = makePotentialGrid(solution, 104, 68);
+  const levels = makeEquipotentialLevels(grid.values);
+  if (!levels.length) return;
+  ctx.save();
+  ctx.strokeStyle = "rgba(92, 112, 126, 0.34)";
+  ctx.lineWidth = 1.1;
+  ctx.setLineDash([5, 6]);
+  levels.forEach(level => drawPotentialContour(grid, level));
+  ctx.restore();
+}
+
+function makePotentialGrid(solution, cols, rows) {
+  const cells = [];
+  const values = [];
+  for (let row = 0; row <= rows; row += 1) {
+    const line = [];
+    const y = row / rows;
+    for (let col = 0; col <= cols; col += 1) {
+      const x = col / cols;
+      const point = { x, y };
+      if (!isDrawablePotentialPoint(point, solution)) {
+        line.push({ x, y, value: NaN, drawable: false });
+        continue;
+      }
+      const value = potentialAt(point, solution);
+      const drawable = Number.isFinite(value);
+      if (drawable) values.push(value);
+      line.push({ x, y, value, drawable });
+    }
+    cells.push(line);
+  }
+  return { cols, rows, cells, values };
+}
+
+function makeEquipotentialLevels(values) {
+  if (values.length < 20) return [];
+  const sorted = values
+    .filter(value => Number.isFinite(value))
+    .sort((a, b) => a - b);
+  if (sorted.length < 20) return [];
+  const low = sorted[Math.floor(sorted.length * 0.06)];
+  const high = sorted[Math.floor(sorted.length * 0.94)];
+  if (!Number.isFinite(low) || !Number.isFinite(high) || Math.abs(high - low) < 1e-6) return [];
+  const count = 10;
+  return Array.from({ length: count }, (_, index) => low + ((index + 1) / (count + 1)) * (high - low));
+}
+
+function drawPotentialContour(grid, level) {
+  for (let row = 0; row < grid.rows; row += 1) {
+    for (let col = 0; col < grid.cols; col += 1) {
+      const p00 = grid.cells[row][col];
+      const p10 = grid.cells[row][col + 1];
+      const p11 = grid.cells[row + 1][col + 1];
+      const p01 = grid.cells[row + 1][col];
+      if (!p00.drawable || !p10.drawable || !p11.drawable || !p01.drawable) continue;
+      const intersections = [
+        contourEdgePoint(p00, p10, level),
+        contourEdgePoint(p10, p11, level),
+        contourEdgePoint(p11, p01, level),
+        contourEdgePoint(p01, p00, level)
+      ].filter(Boolean);
+      if (intersections.length === 2) {
+        drawContourSegment(intersections[0], intersections[1]);
+      } else if (intersections.length === 4) {
+        drawContourSegment(intersections[0], intersections[1]);
+        drawContourSegment(intersections[2], intersections[3]);
+      }
+    }
+  }
+}
+
+function contourEdgePoint(a, b, level) {
+  const av = a.value;
+  const bv = b.value;
+  if (!Number.isFinite(av) || !Number.isFinite(bv)) return null;
+  if ((level < av && level < bv) || (level > av && level > bv) || Math.abs(av - bv) < 1e-9) return null;
+  const t = clamp((level - av) / (bv - av), 0, 1);
+  return {
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t
+  };
+}
+
+function drawContourSegment(a, b) {
+  ctx.beginPath();
+  ctx.moveTo(sx(a.x), sy(a.y));
+  ctx.lineTo(sx(b.x), sy(b.y));
+  ctx.stroke();
 }
 
 function drawFieldLines() {
@@ -1173,6 +1281,11 @@ els.showCharges.addEventListener("change", () => {
 
 els.showLines.addEventListener("change", () => {
   state.showLines = els.showLines.checked;
+  draw();
+});
+
+els.showEquipotentials.addEventListener("change", () => {
+  state.showEquipotentials = els.showEquipotentials.checked;
   draw();
 });
 
