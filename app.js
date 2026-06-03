@@ -968,11 +968,56 @@ function drawBemFieldLines() {
   const solution = getBemSolution();
   const lineSolution = makeLineSolution(solution);
   const reverseArrows = fieldDirectionSign(solution) < 0;
+  if (state.scene === "charged") {
+    drawUniformCircularExteriorFieldLines(0.56, 0.5, 0.2, reverseArrows);
+    return;
+  }
+  if (state.scene === "cavity") {
+    drawCavityInteriorFieldLines(lineSolution, reverseArrows);
+    drawUniformCircularExteriorFieldLines(0.56, 0.5, 0.24, reverseArrows);
+    return;
+  }
   const seeds = makeFieldSeeds(lineSolution);
   if (hasAxisymmetricBoundarySeeds() && solution.sources.length) {
     drawSymmetricFieldPaths(seeds, lineSolution, reverseArrows);
   } else {
     seeds.forEach(seed => traceFieldLine(seed.point, lineSolution, seed.direction, reverseArrows));
+  }
+}
+
+function drawUniformCircularExteriorFieldLines(cx, cy, r, reverseArrows) {
+  const count = Math.round(30 * clamp(0.75 + state.chargeMagnitude * 0.25, 0.8, 1.25));
+  for (let i = 0; i < count; i += 1) {
+    const angle = (Math.PI * 2 * i) / count;
+    drawFieldPath(makeRadialExteriorPath(cx, cy, r, angle), reverseArrows);
+  }
+}
+
+function makeRadialExteriorPath(cx, cy, r, angle) {
+  const path = [];
+  const originX = sx(cx);
+  const originY = sy(cy);
+  const startRadius = sx(r) + 24;
+  const maxRadius = Math.max(canvas.width, canvas.height) * 0.9;
+  for (let pixelRadius = startRadius; pixelRadius <= maxRadius; pixelRadius += 15) {
+    const point = {
+      x: (originX + Math.cos(angle) * pixelRadius) / canvas.width,
+      y: (originY + Math.sin(angle) * pixelRadius) / canvas.height
+    };
+    if (point.x < 0.01 || point.x > 0.99 || point.y < 0.02 || point.y > 0.98) break;
+    path.push(point);
+  }
+  return path;
+}
+
+function drawCavityInteriorFieldLines(solution, reverseArrows) {
+  const source = solution.sources[0];
+  if (!source) return;
+  const count = Math.round(12 * clamp(0.75 + state.chargeMagnitude * 0.25, 0.8, 1.25));
+  for (let i = 0; i < count; i += 1) {
+    const angle = (Math.PI * 2 * i) / count;
+    const seed = pointFromPixelVector(source, angle, 20);
+    traceFieldLine(seed, solution, 1, reverseArrows);
   }
 }
 
