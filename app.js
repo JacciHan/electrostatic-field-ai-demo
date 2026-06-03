@@ -9,6 +9,7 @@ const state = {
   showEquipotentials: true,
   showLabels: true,
   chargeSign: 1,
+  chargeMagnitude: 1,
   charge: { x: 0.23, y: 0.5 },
   dragging: false
 };
@@ -37,8 +38,11 @@ const fieldLineConfig = {
 
 const surfaceChargeScales = {
   solid: 0.065,
+  charged: 0.025,
   shield: 0.07,
-  cavity: 0.095
+  cavity: 0.095,
+  tip: 0.055,
+  dumbbell: 0.025
 };
 
 const sceneMeta = {
@@ -87,7 +91,9 @@ const els = {
   showEquipotentials: document.querySelector("#showEquipotentials"),
   showLabels: document.querySelector("#showLabels"),
   positiveBtn: document.querySelector("#positiveBtn"),
-  negativeBtn: document.querySelector("#negativeBtn")
+  negativeBtn: document.querySelector("#negativeBtn"),
+  chargeAmount: document.querySelector("#chargeAmount"),
+  chargeAmountValue: document.querySelector("#chargeAmountValue")
 };
 
 function sx(x) {
@@ -136,6 +142,10 @@ function pointFromPixelVector(origin, angle, pixelDistance) {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
+function signedCharge() {
+  return state.chargeSign * state.chargeMagnitude;
 }
 
 function toPhys(point) {
@@ -269,7 +279,7 @@ function makeBemGeometry() {
     return {
       boundaries: makeBoundaryCircle(0.56, 0.5, 0.2, 72, "outer"),
       conductors: [{ cx: 0.56, cy: 0.5, inner: 0, outer: 0.2, type: "solid" }],
-      netCharge: state.chargeSign
+      netCharge: signedCharge()
     };
   }
   if (state.scene === "shield" || state.scene === "cavity") {
@@ -287,7 +297,7 @@ function makeBemGeometry() {
     return {
       boundaries,
       conductors: [{ type: "polygon", polygon: boundaries.map(({ x, y }) => ({ x, y })) }],
-      netCharge: state.chargeSign
+      netCharge: signedCharge()
     };
   }
   if (state.scene === "dumbbell") {
@@ -295,7 +305,7 @@ function makeBemGeometry() {
     return {
       boundaries,
       conductors: [{ type: "polygon", polygon: boundaries.map(({ x, y }) => ({ x, y })) }],
-      netCharge: state.chargeSign
+      netCharge: signedCharge()
     };
   }
   throw new Error(`Unknown scene: ${state.scene}`);
@@ -303,7 +313,7 @@ function makeBemGeometry() {
 
 function sourceCharges() {
   if (["charged", "tip", "dumbbell"].includes(state.scene)) return [];
-  return [{ x: state.charge.x, y: state.charge.y, q: state.chargeSign }];
+  return [{ x: state.charge.x, y: state.charge.y, q: signedCharge() }];
 }
 
 function green(a, b, selfSegment = 0) {
@@ -341,6 +351,7 @@ function getBemSolution() {
   const key = [
     state.scene,
     state.chargeSign,
+    state.chargeMagnitude.toFixed(2),
     state.charge.x.toFixed(3),
     state.charge.y.toFixed(3),
     canvas.width,
@@ -462,6 +473,7 @@ function setScene(scene) {
 
 function updateText() {
   const meta = sceneMeta[state.scene];
+  updateChargeAmountLabel();
   els.sceneTitle.textContent = meta.title;
   els.sceneLead.textContent = meta.lead;
   els.statusPill.textContent = state.prediction ? "预测模式" : "模型显示中";
@@ -470,19 +482,25 @@ function updateText() {
   els.modeToggle.textContent = state.prediction ? "显示模型结果" : "进入预测模式";
 
   const signWord = state.chargeSign > 0 ? "正电荷" : "负电荷";
+  const amountWord = Math.abs(signedCharge()).toFixed(2);
   const summaries = {
-    solid: `当前外部${signWord}靠近实心导体。模型实时重算表面感应电荷，使导体内部合电场保持为零。`,
-    charged: `当前孤立球形导体带${signWord}。由于球面对称，净电荷均匀分布在外表面，内部合电场为零。`,
-    shield: `当前外部${signWord}靠近带空腔导体。模型区分导体材料内部 E=0 与空腔区域是否受影响。`,
-    cavity: `当前${signWord}位于空腔内。内表面出现异号感应电荷，分布随电荷位置连续改变。`,
-    tip: "当前为尖端导体边界元求解模型，表面电荷与电场线均由等势边界条件和净电荷约束计算得到。",
-    dumbbell: "当前为哑铃形导体边界元求解模型，用两个相连球形导体对比外侧凸起和连接区域的表面电荷密度差异。"
+    solid: `当前外部${signWord}靠近实心导体，电荷量 ${amountWord}。模型实时重算表面感应电荷，使导体内部合电场保持为零。`,
+    charged: `当前孤立球形导体带${signWord}，净电荷量 ${amountWord}。由于球面对称，净电荷均匀分布在外表面，内部合电场为零。`,
+    shield: `当前外部${signWord}靠近带空腔导体，电荷量 ${amountWord}。模型区分导体材料内部 E=0 与空腔区域是否受影响。`,
+    cavity: `当前${signWord}位于空腔内，电荷量 ${amountWord}。内表面出现异号感应电荷，分布随电荷位置连续改变。`,
+    tip: `当前为尖端导体边界元求解模型，净电荷量 ${amountWord}，表面电荷与电场线均由等势边界条件和净电荷约束计算得到。`,
+    dumbbell: `当前为哑铃形导体边界元求解模型，净电荷量 ${amountWord}，用两个相连球形导体对比外侧凸起和连接区域的表面电荷密度差异。`
   };
   els.aiSummary.textContent = state.prediction
     ? "预测模式：隐藏模型结果，先判断感应电荷位置、导体内部电场和空腔区域电场。"
     : summaries[state.scene];
 
   renderList(els.studentChecks, getStudentChecks());
+}
+
+function updateChargeAmountLabel() {
+  if (!els.chargeAmountValue) return;
+  els.chargeAmountValue.textContent = state.chargeMagnitude.toFixed(2);
 }
 
 function getStudentChecks() {
@@ -745,9 +763,10 @@ function drawPointCharge() {
   const x = sx(state.charge.x);
   const y = sy(state.charge.y);
   const color = state.chargeSign > 0 ? "#c2413f" : "#2563a9";
+  const radius = 18 + Math.sqrt(state.chargeMagnitude) * 4;
   ctx.save();
   ctx.beginPath();
-  ctx.arc(x, y, 22, 0, Math.PI * 2);
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.fillStyle = color;
   ctx.fill();
   ctx.shadowColor = "rgba(0,0,0,0.22)";
@@ -757,7 +776,7 @@ function drawPointCharge() {
   ctx.stroke();
   ctx.shadowBlur = 0;
   ctx.fillStyle = "#fff";
-  ctx.font = "700 28px sans-serif";
+  ctx.font = "700 26px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(state.chargeSign > 0 ? "+" : "-", x, y - 1);
@@ -838,7 +857,7 @@ function makeEquipotentialLevels(values) {
   const low = sorted[Math.floor(sorted.length * 0.06)];
   const high = sorted[Math.floor(sorted.length * 0.94)];
   if (!Number.isFinite(low) || !Number.isFinite(high) || Math.abs(high - low) < 1e-6) return [];
-  const count = 10;
+  const count = Math.round(7 + state.chargeMagnitude * 3);
   return Array.from({ length: count }, (_, index) => low + ((index + 1) / (count + 1)) * (high - low));
 }
 
@@ -945,7 +964,8 @@ function makeFieldSeeds(solution) {
   const positiveBoundaryFlux = solution.charges.reduce((sum, charge) => sum + Math.max(0, charge), 0);
   const sourceFlux = Math.max(0, source.q);
   const fluxTotal = sourceFlux + positiveBoundaryFlux;
-  const lineBudget = state.dragging ? fieldLineConfig.maxLinesDragging : fieldLineConfig.maxLines;
+  const baseLineBudget = state.dragging ? fieldLineConfig.maxLinesDragging : fieldLineConfig.maxLines;
+  const lineBudget = Math.round(baseLineBudget * clamp(0.65 + state.chargeMagnitude * 0.35, 0.7, 1.35));
   const sourceSeedCount = sourceFlux > 0
     ? clamp(
       Math.round((sourceFlux / Math.max(fluxTotal, sourceFlux)) * lineBudget),
@@ -1310,6 +1330,14 @@ els.negativeBtn.addEventListener("click", () => {
   draw();
 });
 
+els.chargeAmount.addEventListener("input", () => {
+  const value = Number(els.chargeAmount.value);
+  if (!Number.isFinite(value)) return;
+  state.chargeMagnitude = clamp(value, 0.25, 2);
+  updateText();
+  draw();
+});
+
 document.querySelector("#resetBtn").addEventListener("click", () => setScene(state.scene));
 
 function constrainCharge(point) {
@@ -1365,6 +1393,13 @@ if (params.get("sign") === "-1") {
   state.chargeSign = -1;
   els.negativeBtn.classList.add("active");
   els.positiveBtn.classList.remove("active");
+  updateText();
+  draw();
+}
+const queryChargeAmount = Number(params.get("q"));
+if (params.has("q") && Number.isFinite(queryChargeAmount)) {
+  state.chargeMagnitude = clamp(queryChargeAmount, 0.25, 2);
+  els.chargeAmount.value = String(state.chargeMagnitude);
   updateText();
   draw();
 }
