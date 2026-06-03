@@ -225,30 +225,30 @@ function makePolygonBoundary(points, role = "outer") {
 }
 
 function makeTipBoundary() {
-  const tipTop = { x: 0.785, y: 0.485 };
-  const tipBottom = { x: 0.785, y: 0.515 };
+  const tipTop = { x: 0.745, y: 0.475 };
+  const tipBottom = { x: 0.745, y: 0.525 };
   const upper = [
     tipTop,
-    { x: 0.68, y: 0.38 },
-    { x: 0.48, y: 0.34 },
-    { x: 0.36, y: 0.42 }
+    { x: 0.61, y: 0.31 },
+    { x: 0.42, y: 0.30 },
+    { x: 0.33, y: 0.47 }
   ];
   const leftCap = [
-    { x: 0.36, y: 0.42 },
-    { x: 0.26, y: 0.45 },
-    { x: 0.26, y: 0.55 },
-    { x: 0.36, y: 0.58 }
+    { x: 0.33, y: 0.47 },
+    { x: 0.28, y: 0.50 },
+    { x: 0.29, y: 0.57 },
+    { x: 0.35, y: 0.62 }
   ];
   const lower = [
-    { x: 0.36, y: 0.58 },
-    { x: 0.48, y: 0.66 },
-    { x: 0.68, y: 0.62 },
+    { x: 0.35, y: 0.62 },
+    { x: 0.45, y: 0.70 },
+    { x: 0.62, y: 0.66 },
     tipBottom
   ];
   const tipCap = [
     tipBottom,
-    { x: 0.812, y: 0.512 },
-    { x: 0.812, y: 0.488 },
+    { x: 0.785, y: 0.518 },
+    { x: 0.785, y: 0.482 },
     tipTop
   ];
   const points = [];
