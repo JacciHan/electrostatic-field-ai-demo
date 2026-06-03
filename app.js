@@ -473,7 +473,16 @@ function potentialAt(point, solution) {
 
 function isDrawablePotentialPoint(point, solution) {
   if (isInConductor(point, solution)) return false;
+  if (isInShieldedCavityInterior(point, solution)) return false;
   return !solution.sources.some(source => physDistance(point, source) < 0.03);
+}
+
+function isInShieldedCavityInterior(point, solution) {
+  if (state.scene !== "shield") return false;
+  const conductor = solution.geometry.conductors[0];
+  if (conductor.type !== "shell") return false;
+  const center = { x: conductor.cx, y: conductor.cy };
+  return physDistance(point, center) < conductor.inner;
 }
 
 function isInConductor(point, solution) {
