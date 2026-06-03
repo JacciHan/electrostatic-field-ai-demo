@@ -834,12 +834,19 @@ function drawBemSurfaceCharges() {
   const charges = visualState.charges.length === solution.charges.length ? visualState.charges : solution.charges;
   const scale = surfaceChargeScales[state.scene] || Math.max(...solution.charges.map(charge => Math.abs(charge)), 1e-6);
   solution.boundaries.forEach((boundary, index) => {
-    const q = charges[index];
+    const q = displaySurfaceCharge(charges[index]);
     const strength = clamp(Math.abs(q) / scale, 0, 1.15);
     if (strength < 0.055) return;
     const point = offsetBoundaryPoint(boundary, 0.009);
     drawSurfaceDot(point.x, point.y, q > 0 ? 1 : -1, 2.4 + strength * 6.2);
   });
+}
+
+function displaySurfaceCharge(q) {
+  if (["charged", "tip", "dumbbell"].includes(state.scene)) {
+    return Math.abs(q) * (state.chargeSign > 0 ? 1 : -1);
+  }
+  return q;
 }
 
 function drawSurfaceDot(x, y, sign, radius) {
