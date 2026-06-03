@@ -29,11 +29,11 @@ const visualState = {
 };
 
 const fieldLineConfig = {
-  maxLines: 30,
-  maxLinesDragging: 20,
+  maxLines: 38,
+  maxLinesDragging: 26,
   minSourceLines: 8,
   maxSourceLines: 14,
-  maxBoundaryLines: 24
+  maxBoundaryLines: 48
 };
 
 const surfaceChargeScales = {
@@ -225,26 +225,42 @@ function makePolygonBoundary(points, role = "outer") {
 }
 
 function makeTipBoundary() {
+  const tipTop = { x: 0.785, y: 0.485 };
+  const tipBottom = { x: 0.785, y: 0.515 };
   const upper = [
-    { x: 0.72, y: 0.5 },
-    { x: 0.56, y: 0.29 },
-    { x: 0.36, y: 0.31 },
-    { x: 0.34, y: 0.5 }
+    tipTop,
+    { x: 0.68, y: 0.38 },
+    { x: 0.48, y: 0.34 },
+    { x: 0.36, y: 0.42 }
+  ];
+  const leftCap = [
+    { x: 0.36, y: 0.42 },
+    { x: 0.26, y: 0.45 },
+    { x: 0.26, y: 0.55 },
+    { x: 0.36, y: 0.58 }
   ];
   const lower = [
-    { x: 0.34, y: 0.5 },
-    { x: 0.36, y: 0.69 },
-    { x: 0.56, y: 0.71 },
-    { x: 0.72, y: 0.5 }
+    { x: 0.36, y: 0.58 },
+    { x: 0.48, y: 0.66 },
+    { x: 0.68, y: 0.62 },
+    tipBottom
+  ];
+  const tipCap = [
+    tipBottom,
+    { x: 0.812, y: 0.512 },
+    { x: 0.812, y: 0.488 },
+    tipTop
   ];
   const points = [];
-  const count = 52;
-  for (let i = 0; i < count; i += 1) {
-    points.push(cubicPoint(upper[0], upper[1], upper[2], upper[3], i / count));
-  }
-  for (let i = 0; i < count; i += 1) {
-    points.push(cubicPoint(lower[0], lower[1], lower[2], lower[3], i / count));
-  }
+  const appendCurve = (curve, count) => {
+    for (let i = 0; i < count; i += 1) {
+      points.push(cubicPoint(curve[0], curve[1], curve[2], curve[3], i / count));
+    }
+  };
+  appendCurve(upper, 38);
+  appendCurve(leftCap, 24);
+  appendCurve(lower, 38);
+  appendCurve(tipCap, 14);
   return makePolygonBoundary(points, "outer");
 }
 
