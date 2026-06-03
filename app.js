@@ -252,10 +252,9 @@ function makeTipBoundary() {
   const tipTop = pointBeforeApex(topJoin);
   const tipBottom = pointBeforeApex(bottomJoin);
   const tipCap = [
-    tipBottom,
-    { x: 0.813, y: 0.506 },
     { x: 0.813, y: 0.494 },
-    tipTop
+    { x: 0.813, y: 0.506 },
+    tipBottom
   ];
   const points = [];
   const appendLine = (from, to, count) => {
@@ -285,7 +284,7 @@ function makeTipBoundary() {
     }
   };
   appendLine(topJoin, tipTop, 28);
-  appendCurve(tipCap, 8);
+  appendCurve([tipTop, ...tipCap], 8);
   appendLine(tipBottom, bottomJoin, 28);
   appendBodyArc(72);
   return makePolygonBoundary(points, "outer");
