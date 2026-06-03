@@ -227,7 +227,7 @@ function makePolygonBoundary(points, role = "outer") {
 function makeTipBoundary() {
   const center = { x: 0.395, y: 0.5 };
   const radius = 0.22;
-  const apex = { x: 0.81, y: 0.5 };
+  const apex = { x: 0.85, y: 0.5 };
   const distance = apex.x - center.x;
   const tangentX = (radius * radius) / distance;
   const tangentY = radius * Math.sqrt(1 - (radius / distance) ** 2);
@@ -243,7 +243,7 @@ function makeTipBoundary() {
     const dx = apex.x - from.x;
     const dy = apex.y - from.y;
     const len = Math.hypot(dx, dy) || 1;
-    const inset = 0.014;
+    const inset = 0.008;
     return {
       x: apex.x - (dx / len) * inset,
       y: apex.y - (dy / len) * inset
@@ -252,8 +252,8 @@ function makeTipBoundary() {
   const tipTop = pointBeforeApex(topJoin);
   const tipBottom = pointBeforeApex(bottomJoin);
   const tipCap = [
-    { x: 0.813, y: 0.494 },
-    { x: 0.813, y: 0.506 },
+    { x: 0.852, y: 0.497 },
+    { x: 0.852, y: 0.503 },
     tipBottom
   ];
   const points = [];
