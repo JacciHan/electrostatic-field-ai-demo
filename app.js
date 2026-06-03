@@ -225,42 +225,56 @@ function makePolygonBoundary(points, role = "outer") {
 }
 
 function makeTipBoundary() {
-  const tipTop = { x: 0.745, y: 0.475 };
-  const tipBottom = { x: 0.745, y: 0.525 };
-  const upper = [
-    tipTop,
-    { x: 0.61, y: 0.31 },
-    { x: 0.42, y: 0.30 },
-    { x: 0.33, y: 0.47 }
-  ];
-  const leftCap = [
-    { x: 0.33, y: 0.47 },
-    { x: 0.28, y: 0.50 },
-    { x: 0.29, y: 0.57 },
-    { x: 0.35, y: 0.62 }
-  ];
-  const lower = [
-    { x: 0.35, y: 0.62 },
-    { x: 0.45, y: 0.70 },
-    { x: 0.62, y: 0.66 },
-    tipBottom
-  ];
+  const center = { x: 0.395, y: 0.5 };
+  const radius = 0.22;
+  const joinAngle = Math.PI / 4.1;
+  const topJoin = {
+    x: center.x + Math.cos(-joinAngle) * radius,
+    y: center.y + Math.sin(-joinAngle) * radius
+  };
+  const bottomJoin = {
+    x: center.x + Math.cos(joinAngle) * radius,
+    y: center.y + Math.sin(joinAngle) * radius
+  };
+  const tipTop = { x: 0.76, y: 0.477 };
+  const tipBottom = { x: 0.76, y: 0.523 };
   const tipCap = [
     tipBottom,
-    { x: 0.785, y: 0.518 },
-    { x: 0.785, y: 0.482 },
+    { x: 0.795, y: 0.516 },
+    { x: 0.795, y: 0.484 },
     tipTop
   ];
   const points = [];
+  const appendLine = (from, to, count) => {
+    for (let i = 0; i < count; i += 1) {
+      const t = i / count;
+      points.push({
+        x: from.x + (to.x - from.x) * t,
+        y: from.y + (to.y - from.y) * t
+      });
+    }
+  };
   const appendCurve = (curve, count) => {
     for (let i = 0; i < count; i += 1) {
       points.push(cubicPoint(curve[0], curve[1], curve[2], curve[3], i / count));
     }
   };
-  appendCurve(upper, 38);
-  appendCurve(leftCap, 24);
-  appendCurve(lower, 38);
+  const appendBodyArc = (count) => {
+    const start = joinAngle;
+    const end = Math.PI * 2 - joinAngle;
+    for (let i = 0; i < count; i += 1) {
+      const t = i / count;
+      const angle = start + (end - start) * t;
+      points.push({
+        x: center.x + Math.cos(angle) * radius,
+        y: center.y + Math.sin(angle) * radius
+      });
+    }
+  };
+  appendLine(topJoin, tipTop, 24);
   appendCurve(tipCap, 14);
+  appendLine(tipBottom, bottomJoin, 24);
+  appendBodyArc(56);
   return makePolygonBoundary(points, "outer");
 }
 
