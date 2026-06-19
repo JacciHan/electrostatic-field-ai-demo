@@ -19,11 +19,6 @@ const bemCache = {
   solution: null
 };
 
-const lightningCache = {
-  key: "",
-  solution: null
-};
-
 let drawQueued = false;
 
 const visualState = {
@@ -52,14 +47,14 @@ const surfaceChargeScales = {
 };
 
 const lightningLayout = {
-  plate: { x: 0.13, y: 0.14, w: 0.74, h: 0.04 },
-  ball: { cx: 0.31, cy: 0.64, r: 0.125 },
+  plate: { x: 0.18, y: 0.15, w: 0.64, h: 0.035 },
+  ball: { cx: 0.34, cy: 0.62, r: 0.105 },
   needle: {
-    tip: { x: 0.70, y: 0.39 },
-    leftBase: { x: 0.655, y: 0.79 },
-    rightBase: { x: 0.745, y: 0.79 },
-    stemLeft: 0.685,
-    stemRight: 0.715
+    tip: { x: 0.72, y: 0.38 },
+    leftBase: { x: 0.695, y: 0.76 },
+    rightBase: { x: 0.745, y: 0.76 },
+    stemLeft: 0.708,
+    stemRight: 0.732
   }
 };
 
@@ -452,94 +447,6 @@ function getBemSolution() {
   return solution;
 }
 
-function getLightningSolution() {
-  const key = [
-    "rod",
-    state.chargeSign,
-    state.chargeMagnitude.toFixed(2),
-    canvas.width,
-    canvas.height
-  ].join("|");
-  if (lightningCache.key === key) return lightningCache.solution;
-
-  const cols = 126;
-  const rows = 78;
-  const values = Array.from({ length: rows + 1 }, () => Array(cols + 1).fill(0));
-  const fixed = Array.from({ length: rows + 1 }, () => Array(cols + 1).fill(false));
-  const solid = Array.from({ length: rows + 1 }, () => Array(cols + 1).fill(""));
-  const platePotential = state.chargeSign > 0 ? state.chargeMagnitude : -state.chargeMagnitude;
-
-  for (let row = 0; row <= rows; row += 1) {
-    for (let col = 0; col <= cols; col += 1) {
-      const point = { x: col / cols, y: row / rows };
-      const material = lightningMaterialAt(point);
-      if (material) {
-        fixed[row][col] = true;
-        solid[row][col] = material;
-        values[row][col] = material === "plate" ? platePotential : 0;
-      } else if (row === 0 || row === rows || col === 0 || col === cols) {
-        fixed[row][col] = true;
-        values[row][col] = platePotential * (1 - point.y);
-      } else {
-        values[row][col] = platePotential * (1 - point.y) * 0.45;
-      }
-    }
-  }
-
-  for (let iteration = 0; iteration < 620; iteration += 1) {
-    for (let row = 1; row < rows; row += 1) {
-      for (let col = 1; col < cols; col += 1) {
-        if (fixed[row][col]) continue;
-        values[row][col] = (
-          values[row - 1][col] +
-          values[row + 1][col] +
-          values[row][col - 1] +
-          values[row][col + 1]
-        ) / 4;
-      }
-    }
-  }
-
-  const solution = { cols, rows, values, fixed, solid, platePotential };
-  lightningCache.key = key;
-  lightningCache.solution = solution;
-  return solution;
-}
-
-function lightningMaterialAt(point) {
-  const { plate, ball, needle } = lightningLayout;
-  if (
-    point.x >= plate.x &&
-    point.x <= plate.x + plate.w &&
-    point.y >= plate.y &&
-    point.y <= plate.y + plate.h
-  ) return "plate";
-
-  const ballDx = point.x - ball.cx;
-  const ballDy = (point.y - ball.cy) * canvas.height / canvas.width;
-  if (Math.hypot(ballDx, ballDy) <= ball.r) return "ball";
-
-  if (pointInTriangle(point, needle.tip, needle.leftBase, needle.rightBase)) return "needle";
-  if (
-    point.x >= needle.stemLeft &&
-    point.x <= needle.stemRight &&
-    point.y >= needle.tip.y &&
-    point.y <= 0.9
-  ) return "needle";
-
-  return "";
-}
-
-function pointInTriangle(point, a, b, c) {
-  const sign = (p1, p2, p3) => (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
-  const d1 = sign(point, a, b);
-  const d2 = sign(point, b, c);
-  const d3 = sign(point, c, a);
-  const hasNegative = d1 < 0 || d2 < 0 || d3 < 0;
-  const hasPositive = d1 > 0 || d2 > 0 || d3 > 0;
-  return !(hasNegative && hasPositive);
-}
-
 function applyPhysicalChargeCorrections(boundaries, charges) {
   const corrected = [...charges];
   if (state.scene === "shield") {
@@ -653,7 +560,7 @@ function updateText() {
     shield: `当前外部${signWord}靠近带空腔导体，电荷量 ${amountWord}。模型区分导体材料内部 E=0 与空腔区域是否受影响。`,
     cavity: `当前${signWord}位于空腔内，电荷量 ${amountWord}。内表面出现异号感应电荷，分布随电荷位置连续改变。`,
     tip: `当前为尖端导体边界元求解模型，净电荷量 ${amountWord}，表面电荷与电场线均由等势边界条件和净电荷约束计算得到。`,
-    rod: "当前为避雷针演示器示意模型：上方带电板与下方金属球、尖端针形成电势差。模型突出比较球面和尖端附近电场线疏密。",
+    rod: "当前为避雷针教具插图：在同一带电板下对比金属球和尖端针。线条经过课堂强化，但保持场线不穿导体、近表面近似垂直等基本约束。",
     dumbbell: `当前为哑铃形导体边界元求解模型，净电荷量 ${amountWord}，用两个相连球形导体对比外侧凸起和连接区域的表面电荷密度差异。`
   };
   els.aiSummary.textContent = state.prediction
@@ -685,7 +592,7 @@ function getStudentChecks() {
     return ["电场线已加粗，便于投屏观察。", "尖端附近线条更密，表示场强更大。", "导体边界满足等势条件。"];
   }
   if (state.scene === "rod") {
-    return ["金属球附近场线较稀疏、较均匀。", "尖端针附近场线明显集中。", "线密处表示场强更大，更容易击穿空气。"];
+    return ["金属球附近场线较疏，分布更均匀。", "尖端附近场线明显收束，表示局部场强更大。", "这是服务课堂比较的教具插图，不是复杂数值仿真。"];
   }
   if (state.scene === "dumbbell") {
     return ["外侧凸起处电荷较密。", "两球连接附近电荷较少。", "整体仍是同一个等势导体。"];
@@ -702,10 +609,11 @@ function renderList(root, items) {
   });
 }
 
-function clearCanvas() {
+function clearCanvas(showGrid = true) {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "#fcfdfe";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (!showGrid) return;
   ctx.strokeStyle = "rgba(117, 132, 143, 0.075)";
   ctx.lineWidth = 1;
   for (let x = 80; x < canvas.width; x += 80) {
@@ -833,19 +741,10 @@ function updatePhysicsDiagnostics(elapsedMs = 0) {
 }
 
 function updateLightningDiagnostics(elapsedMs = 0) {
-  const solution = getLightningSolution();
-  const tip = lightningLayout.needle.tip;
-  const ballTop = {
-    x: lightningLayout.ball.cx,
-    y: lightningLayout.ball.cy - nxToNyRadius(lightningLayout.ball.r) - 0.02
-  };
-  const tipField = lightningFieldMagnitudeAt(tip.x, tip.y - 0.035, solution);
-  const ballField = lightningFieldMagnitudeAt(ballTop.x, ballTop.y, solution);
-  const ratio = ballField > 1e-6 ? tipField / ballField : 0;
   renderList(els.physicsChecks, [
-    "导体内部保持等势，场线不穿过金属。",
-    `尖端附近场强约为球顶的 ${ratio.toFixed(1)} 倍`,
-    `电势网格求解与绘制耗时：${elapsedMs.toFixed(1)} ms`
+    "场线在导体表面附近近似垂直。",
+    "场线不穿过金属，导体内部保持 E = 0。",
+    `教具插图绘制耗时：${elapsedMs.toFixed(1)} ms`
   ]);
 }
 
@@ -862,10 +761,10 @@ function drawConductor() {
 }
 
 function drawLightningRodScene(startedAt) {
-  const solution = getLightningSolution();
-  clearCanvas();
-  if (!state.prediction && state.showEquipotentials) drawLightningEquipotentials(solution);
-  if (!state.prediction && state.showLines) drawLightningFieldLines(solution);
+  clearCanvas(false);
+  if (!state.prediction && state.showLines) drawLightningFocusGlow();
+  if (!state.prediction && state.showEquipotentials) drawLightningPotentialGuides();
+  if (!state.prediction && state.showLines) drawLightningIllustrationFieldLines();
   drawLightningApparatus();
   if (!state.prediction && state.showCharges) drawLightningSurfaceCharges();
   if (state.showLabels) drawLabels();
@@ -1023,35 +922,44 @@ function drawLightningApparatus() {
   const { plate, ball, needle } = lightningLayout;
   ctx.save();
 
-  ctx.fillStyle = "#d7dee3";
-  ctx.strokeStyle = "#6f7e89";
-  ctx.lineWidth = 3;
+  ctx.fillStyle = "#dbe3e8";
+  ctx.strokeStyle = "#7a8993";
+  ctx.lineWidth = 2.2;
   ctx.fillRect(sx(plate.x), sy(plate.y), sx(plate.w), sy(plate.h));
   ctx.strokeRect(sx(plate.x), sy(plate.y), sx(plate.w), sy(plate.h));
 
   drawDisk(ball.cx, ball.cy, ball.r);
   ctx.fillStyle = "#b9c4cc";
-  ctx.fillRect(sx(ball.cx - 0.012), sy(ball.cy + nxToNyRadius(ball.r) * 0.85), sx(0.024), sy(0.18));
+  ctx.fillRect(sx(ball.cx - 0.009), sy(ball.cy + nxToNyRadius(ball.r) * 0.86), sx(0.018), sy(0.17));
   ctx.strokeStyle = "#7f8e99";
-  ctx.strokeRect(sx(ball.cx - 0.012), sy(ball.cy + nxToNyRadius(ball.r) * 0.85), sx(0.024), sy(0.18));
+  ctx.strokeRect(sx(ball.cx - 0.009), sy(ball.cy + nxToNyRadius(ball.r) * 0.86), sx(0.018), sy(0.17));
 
-  const grad = ctx.createLinearGradient(sx(needle.leftBase.x), sy(needle.leftBase.y), sx(needle.tip.x), sy(needle.tip.y));
-  grad.addColorStop(0, "#d8e1e6");
-  grad.addColorStop(1, "#eef3f6");
+  const needleGrad = ctx.createLinearGradient(sx(needle.leftBase.x), sy(needle.leftBase.y), sx(needle.tip.x), sy(needle.tip.y));
+  needleGrad.addColorStop(0, "#cbd6dd");
+  needleGrad.addColorStop(1, "#f8fbfc");
   ctx.beginPath();
   ctx.moveTo(sx(needle.tip.x), sy(needle.tip.y));
   ctx.lineTo(sx(needle.rightBase.x), sy(needle.rightBase.y));
   ctx.lineTo(sx(needle.leftBase.x), sy(needle.leftBase.y));
   ctx.closePath();
-  ctx.fillStyle = grad;
+  ctx.fillStyle = needleGrad;
   ctx.fill();
   ctx.strokeStyle = "#6f7e89";
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 2.2;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(sx(needle.tip.x), sy(needle.tip.y));
+  ctx.lineTo(sx(needle.tip.x), sy(needle.leftBase.y + 0.02));
+  ctx.strokeStyle = "rgba(85, 99, 109, 0.38)";
+  ctx.lineWidth = 1.1;
   ctx.stroke();
 
   ctx.fillStyle = "#b9c4cc";
-  ctx.fillRect(sx(needle.stemLeft), sy(0.78), sx(needle.stemRight - needle.stemLeft), sy(0.13));
-  ctx.strokeRect(sx(needle.stemLeft), sy(0.78), sx(needle.stemRight - needle.stemLeft), sy(0.13));
+  ctx.fillRect(sx(needle.stemLeft), sy(0.76), sx(needle.stemRight - needle.stemLeft), sy(0.15));
+  ctx.strokeStyle = "#7f8e99";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(sx(needle.stemLeft), sy(0.76), sx(needle.stemRight - needle.stemLeft), sy(0.15));
 
   ctx.restore();
 }
@@ -1060,22 +968,22 @@ function drawLightningSurfaceCharges() {
   const { plate, ball, needle } = lightningLayout;
   const plateSign = state.chargeSign > 0 ? 1 : -1;
   const conductorSign = -plateSign;
-  for (let i = 0; i < 15; i += 1) {
-    const x = plate.x + 0.035 + i * (plate.w - 0.07) / 14;
-    drawChargeMark(x, plate.y + plate.h * 0.52, plateSign, 15);
+  for (let i = 0; i < 9; i += 1) {
+    const x = plate.x + 0.055 + i * (plate.w - 0.11) / 8;
+    drawChargeMark(x, plate.y + plate.h * 0.52, plateSign, 12);
   }
-  for (let i = 0; i < 14; i += 1) {
-    const angle = -Math.PI * 0.88 + i * Math.PI * 0.76 / 13;
+  for (let i = 0; i < 7; i += 1) {
+    const angle = -Math.PI * 0.77 + i * Math.PI * 0.54 / 6;
     const p = circlePoint(ball.cx, ball.cy, ball.r, angle, 0.008);
-    drawSurfaceDot(p.x, p.y, conductorSign, 4.2);
+    drawSurfaceDot(p.x, p.y, conductorSign, 3.8);
   }
   const tip = needle.tip;
-  for (let i = 0; i < 18; i += 1) {
-    const t = i / 17;
+  for (let i = 0; i < 12; i += 1) {
+    const t = i / 11;
     const side = i % 2 === 0 ? needle.leftBase : needle.rightBase;
-    const x = tip.x + (side.x - tip.x) * Math.min(0.34, t * 0.42);
-    const y = tip.y + (side.y - tip.y) * Math.min(0.34, t * 0.42);
-    drawSurfaceDot(x, y, conductorSign, 3.8 + (1 - t) * 3.6);
+    const x = tip.x + (side.x - tip.x) * Math.min(0.27, t * 0.34);
+    const y = tip.y + (side.y - tip.y) * Math.min(0.27, t * 0.34);
+    drawSurfaceDot(x, y, conductorSign, 3.4 + (1 - t) * 3.2);
   }
 }
 
@@ -1110,29 +1018,16 @@ function drawEquipotentialLines() {
   ctx.restore();
 }
 
-function drawLightningEquipotentials(solution) {
-  const cells = [];
-  const values = [];
-  for (let row = 0; row <= solution.rows; row += 1) {
-    const line = [];
-    for (let col = 0; col <= solution.cols; col += 1) {
-      const x = col / solution.cols;
-      const y = row / solution.rows;
-      const material = lightningMaterialAt({ x, y });
-      const value = solution.values[row][col];
-      const drawable = !material && Number.isFinite(value);
-      if (drawable) values.push(value);
-      line.push({ x, y, value, drawable });
-    }
-    cells.push(line);
-  }
-  const levels = makeEquipotentialLevels(values);
-  if (!levels.length) return;
+function drawLightningPotentialGuides() {
   ctx.save();
-  ctx.strokeStyle = "rgba(92, 112, 126, 0.26)";
-  ctx.lineWidth = 1.15;
-  ctx.setLineDash([5, 7]);
-  levels.forEach(level => drawPotentialContour({ cols: solution.cols, rows: solution.rows, cells }, level));
+  ctx.strokeStyle = "rgba(99, 118, 132, 0.12)";
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([8, 10]);
+  [
+    [0.20, 0.30, 0.37, 0.25, 0.52, 0.25, 0.70, 0.30],
+    [0.17, 0.42, 0.35, 0.35, 0.55, 0.35, 0.83, 0.42],
+    [0.18, 0.75, 0.36, 0.88, 0.59, 0.88, 0.84, 0.74]
+  ].forEach(points => drawCubicStroke(...points));
   ctx.restore();
 }
 
@@ -1226,17 +1121,81 @@ function drawFieldLines() {
   ctx.restore();
 }
 
-function drawLightningFieldLines(solution) {
+function drawLightningFocusGlow() {
   ctx.save();
-  ctx.globalAlpha = 0.9;
-  ctx.strokeStyle = "rgba(31, 97, 125, 0.62)";
-  ctx.lineWidth = 2.35;
-  ctx.lineCap = "round";
-  makeLightningSeeds().forEach((seed) => {
-    const path = traceLightningPath(seed, solution);
-    drawFieldPath(path, state.chargeSign < 0);
-  });
+  const tip = lightningLayout.needle.tip;
+  const grad = ctx.createRadialGradient(sx(tip.x), sy(tip.y), 4, sx(tip.x), sy(tip.y), sx(0.16));
+  grad.addColorStop(0, "rgba(185, 66, 74, 0.22)");
+  grad.addColorStop(0.45, "rgba(185, 66, 74, 0.09)");
+  grad.addColorStop(1, "rgba(185, 66, 74, 0)");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(sx(tip.x), sy(tip.y), sx(0.16), 0, Math.PI * 2);
+  ctx.fill();
   ctx.restore();
+}
+
+function drawLightningIllustrationFieldLines() {
+  const reverseArrows = state.chargeSign < 0;
+  ctx.save();
+  ctx.globalAlpha = 0.94;
+  ctx.strokeStyle = "rgba(31, 97, 125, 0.58)";
+  ctx.lineWidth = 2.3;
+  ctx.lineCap = "round";
+
+  const ballLines = [
+    [0.24, 0.19, 0.24, 0.34, 0.24, 0.43, 0.27, 0.52],
+    [0.30, 0.19, 0.30, 0.34, 0.30, 0.42, 0.31, 0.50],
+    [0.36, 0.19, 0.36, 0.34, 0.36, 0.42, 0.37, 0.50],
+    [0.42, 0.19, 0.43, 0.34, 0.43, 0.45, 0.40, 0.55],
+    [0.21, 0.22, 0.16, 0.35, 0.17, 0.49, 0.25, 0.59],
+    [0.48, 0.22, 0.54, 0.35, 0.53, 0.50, 0.43, 0.60]
+  ];
+  ballLines.forEach(points => drawCubicFieldPath(points, reverseArrows));
+
+  ctx.strokeStyle = "rgba(31, 97, 125, 0.66)";
+  ctx.lineWidth = 2.55;
+  const tipLines = [
+    [0.56, 0.19, 0.56, 0.28, 0.61, 0.34, 0.70, 0.39],
+    [0.60, 0.19, 0.60, 0.28, 0.64, 0.34, 0.708, 0.386],
+    [0.64, 0.19, 0.64, 0.28, 0.67, 0.34, 0.714, 0.382],
+    [0.68, 0.19, 0.68, 0.28, 0.70, 0.34, 0.719, 0.379],
+    [0.72, 0.19, 0.72, 0.28, 0.72, 0.34, 0.72, 0.378],
+    [0.76, 0.19, 0.76, 0.28, 0.74, 0.34, 0.721, 0.379],
+    [0.80, 0.19, 0.80, 0.29, 0.76, 0.35, 0.728, 0.386],
+    [0.84, 0.22, 0.87, 0.35, 0.81, 0.42, 0.735, 0.405],
+    [0.52, 0.22, 0.48, 0.35, 0.58, 0.43, 0.697, 0.405]
+  ];
+  tipLines.forEach(points => drawCubicFieldPath(points, reverseArrows));
+  ctx.restore();
+}
+
+function drawCubicFieldPath(points, reverseArrow = false) {
+  const path = makeCubicPath(points);
+  drawFieldPath(path, reverseArrow);
+}
+
+function drawCubicStroke(x0, y0, x1, y1, x2, y2, x3, y3) {
+  ctx.beginPath();
+  ctx.moveTo(sx(x0), sy(y0));
+  ctx.bezierCurveTo(sx(x1), sy(y1), sx(x2), sy(y2), sx(x3), sy(y3));
+  ctx.stroke();
+}
+
+function makeCubicPath(points, steps = 54) {
+  const [x0, y0, x1, y1, x2, y2, x3, y3] = points;
+  const path = [];
+  for (let i = 0; i <= steps; i += 1) {
+    const t = i / steps;
+    path.push(cubicPoint(
+      { x: x0, y: y0 },
+      { x: x1, y: y1 },
+      { x: x2, y: y2 },
+      { x: x3, y: y3 },
+      t
+    ));
+  }
+  return path;
 }
 
 function drawBemFieldLines() {
@@ -1354,61 +1313,6 @@ function makeFieldSeeds(solution) {
   seeds.push(...makeBoundaryFluxSeeds(solution, boundaryBudget));
 
   return seeds.slice(0, lineBudget);
-}
-
-function makeLightningSeeds() {
-  const seeds = [];
-  for (let i = 0; i < 9; i += 1) {
-    const t = i / 8;
-    seeds.push({ x: 0.2 + t * 0.23, y: lightningLayout.plate.y + lightningLayout.plate.h + 0.012 });
-  }
-  for (let i = 0; i < 26; i += 1) {
-    const t = i / 25;
-    const centered = (t - 0.5) * 2;
-    const x = lightningLayout.needle.tip.x + Math.sign(centered) * Math.abs(centered) ** 1.55 * 0.17;
-    seeds.push({ x, y: lightningLayout.plate.y + lightningLayout.plate.h + 0.012 });
-  }
-  for (let i = 0; i < 8; i += 1) {
-    const t = i / 7;
-    seeds.push({ x: 0.48 + t * 0.34, y: lightningLayout.plate.y + lightningLayout.plate.h + 0.012 });
-  }
-  return seeds;
-}
-
-function lightningFieldAt(point, solution) {
-  const col = Math.round(clamp(point.x * solution.cols, 1, solution.cols - 1));
-  const row = Math.round(clamp(point.y * solution.rows, 1, solution.rows - 1));
-  const dvx = solution.values[row][col + 1] - solution.values[row][col - 1];
-  const dvy = solution.values[row + 1][col] - solution.values[row - 1][col];
-  const sign = state.chargeSign > 0 ? 1 : -1;
-  return {
-    x: -dvx * sign,
-    y: -dvy * sign
-  };
-}
-
-function lightningFieldMagnitudeAt(x, y, solution) {
-  const field = lightningFieldAt({ x, y }, solution);
-  return Math.hypot(field.x, field.y);
-}
-
-function traceLightningPath(seed, solution) {
-  let point = { ...seed };
-  const path = [point];
-  for (let step = 0; step < 360; step += 1) {
-    const field = lightningFieldAt(point, solution);
-    const mag = Math.hypot(field.x, field.y);
-    if (!Number.isFinite(mag) || mag < 1e-6) break;
-    const next = {
-      x: point.x + (field.x / mag) * 0.006,
-      y: point.y + (field.y / mag) * 0.006
-    };
-    if (next.x < 0.025 || next.x > 0.975 || next.y < 0.025 || next.y > 0.96) break;
-    if (lightningMaterialAt(next) && path.length > 2) break;
-    path.push(next);
-    point = next;
-  }
-  return path;
 }
 
 function makeBoundaryFluxSeeds(solution, budget) {
@@ -1641,9 +1545,9 @@ function drawLabels() {
     drawBadge(0.76, 0.42, "尖端附近电场更强", "#334155");
     drawBadge(0.5, 0.68, "同一导体表面电荷不均匀", "#334155");
   } else if (state.scene === "rod") {
-    drawBadge(0.31, 0.42, "金属球：较稀疏、较均匀", "#334155");
-    drawBadge(0.71, 0.31, "尖端：电场线密集", "#334155");
-    drawBadge(0.5, 0.21, "带电金属板", "#334155");
+    drawSmallBadge(0.34, 0.43, "金属球：场线较疏", "#334155");
+    drawSmallBadge(0.72, 0.31, "尖端：场线收束", "#334155");
+    drawSmallBadge(0.50, 0.22, "带电金属板", "#334155");
   } else if (state.scene === "dumbbell") {
     drawBadge(0.31, 0.42, "左侧外凸面", "#334155");
     drawBadge(0.74, 0.42, "右侧外凸面", "#334155");
@@ -1662,6 +1566,27 @@ function drawBadge(x, y, text, color) {
   const py = sy(y) - h / 2;
   ctx.fillStyle = "rgba(255, 255, 255, 0.88)";
   ctx.strokeStyle = "rgba(139, 152, 162, 0.42)";
+  ctx.lineWidth = 1;
+  ctx.fillRect(px, py, w, h);
+  ctx.strokeRect(px, py, w, h);
+  ctx.fillStyle = color;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, sx(x), sy(y) + 1);
+  ctx.restore();
+}
+
+function drawSmallBadge(x, y, text, color) {
+  ctx.save();
+  ctx.font = "700 18px sans-serif";
+  const paddingX = 10;
+  const metrics = ctx.measureText(text);
+  const w = metrics.width + paddingX * 2;
+  const h = 32;
+  const px = sx(x) - w / 2;
+  const py = sy(y) - h / 2;
+  ctx.fillStyle = "rgba(255, 255, 255, 0.78)";
+  ctx.strokeStyle = "rgba(139, 152, 162, 0.32)";
   ctx.lineWidth = 1;
   ctx.fillRect(px, py, w, h);
   ctx.strokeRect(px, py, w, h);
