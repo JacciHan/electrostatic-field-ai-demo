@@ -19,6 +19,11 @@ const bemCache = {
   solution: null
 };
 
+const lightningCache = {
+  key: "",
+  solution: null
+};
+
 let drawQueued = false;
 
 const visualState = {
@@ -42,8 +47,23 @@ const surfaceChargeScales = {
   shield: 0.07,
   cavity: 0.095,
   tip: 0.055,
+  rod: 0.055,
   dumbbell: 0.025
 };
+
+const lightningLayout = {
+  plate: { x: 0.13, y: 0.14, w: 0.74, h: 0.04 },
+  ball: { cx: 0.31, cy: 0.64, r: 0.125 },
+  needle: {
+    tip: { x: 0.70, y: 0.39 },
+    leftBase: { x: 0.655, y: 0.79 },
+    rightBase: { x: 0.745, y: 0.79 },
+    stemLeft: 0.685,
+    stemRight: 0.715
+  }
+};
+
+const validScenes = ["solid", "charged", "shield", "cavity", "tip", "rod", "dumbbell"];
 
 const sceneMeta = {
   solid: {
@@ -70,6 +90,11 @@ const sceneMeta = {
     title: "尖端效应：电荷密度与电场强弱",
     lead: "通过边界元求解尖端导体表面电荷，观察尖端附近电荷密度和电场强度的增强。",
     question: "为什么避雷针和尖端放电都和“尖端附近电场更强”有关？"
+  },
+  rod: {
+    title: "避雷针演示器：金属球与尖端对比",
+    lead: "对照实物装置：同一带电板下，比较金属球和尖端针附近电场线的疏密差异。",
+    question: "同样靠近带电板，为什么尖端针附近更容易出现放电？"
   },
   dumbbell: {
     title: "哑铃形导体：两个相连球形导体",
@@ -427,6 +452,94 @@ function getBemSolution() {
   return solution;
 }
 
+function getLightningSolution() {
+  const key = [
+    "rod",
+    state.chargeSign,
+    state.chargeMagnitude.toFixed(2),
+    canvas.width,
+    canvas.height
+  ].join("|");
+  if (lightningCache.key === key) return lightningCache.solution;
+
+  const cols = 126;
+  const rows = 78;
+  const values = Array.from({ length: rows + 1 }, () => Array(cols + 1).fill(0));
+  const fixed = Array.from({ length: rows + 1 }, () => Array(cols + 1).fill(false));
+  const solid = Array.from({ length: rows + 1 }, () => Array(cols + 1).fill(""));
+  const platePotential = state.chargeSign > 0 ? state.chargeMagnitude : -state.chargeMagnitude;
+
+  for (let row = 0; row <= rows; row += 1) {
+    for (let col = 0; col <= cols; col += 1) {
+      const point = { x: col / cols, y: row / rows };
+      const material = lightningMaterialAt(point);
+      if (material) {
+        fixed[row][col] = true;
+        solid[row][col] = material;
+        values[row][col] = material === "plate" ? platePotential : 0;
+      } else if (row === 0 || row === rows || col === 0 || col === cols) {
+        fixed[row][col] = true;
+        values[row][col] = platePotential * (1 - point.y);
+      } else {
+        values[row][col] = platePotential * (1 - point.y) * 0.45;
+      }
+    }
+  }
+
+  for (let iteration = 0; iteration < 620; iteration += 1) {
+    for (let row = 1; row < rows; row += 1) {
+      for (let col = 1; col < cols; col += 1) {
+        if (fixed[row][col]) continue;
+        values[row][col] = (
+          values[row - 1][col] +
+          values[row + 1][col] +
+          values[row][col - 1] +
+          values[row][col + 1]
+        ) / 4;
+      }
+    }
+  }
+
+  const solution = { cols, rows, values, fixed, solid, platePotential };
+  lightningCache.key = key;
+  lightningCache.solution = solution;
+  return solution;
+}
+
+function lightningMaterialAt(point) {
+  const { plate, ball, needle } = lightningLayout;
+  if (
+    point.x >= plate.x &&
+    point.x <= plate.x + plate.w &&
+    point.y >= plate.y &&
+    point.y <= plate.y + plate.h
+  ) return "plate";
+
+  const ballDx = point.x - ball.cx;
+  const ballDy = (point.y - ball.cy) * canvas.height / canvas.width;
+  if (Math.hypot(ballDx, ballDy) <= ball.r) return "ball";
+
+  if (pointInTriangle(point, needle.tip, needle.leftBase, needle.rightBase)) return "needle";
+  if (
+    point.x >= needle.stemLeft &&
+    point.x <= needle.stemRight &&
+    point.y >= needle.tip.y &&
+    point.y <= 0.9
+  ) return "needle";
+
+  return "";
+}
+
+function pointInTriangle(point, a, b, c) {
+  const sign = (p1, p2, p3) => (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
+  const d1 = sign(point, a, b);
+  const d2 = sign(point, b, c);
+  const d3 = sign(point, c, a);
+  const hasNegative = d1 < 0 || d2 < 0 || d3 < 0;
+  const hasPositive = d1 > 0 || d2 > 0 || d3 > 0;
+  return !(hasNegative && hasPositive);
+}
+
 function applyPhysicalChargeCorrections(boundaries, charges) {
   const corrected = [...charges];
   if (state.scene === "shield") {
@@ -513,7 +626,7 @@ function setScene(scene) {
   }
   if (scene === "cavity") state.charge = { x: 0.5, y: 0.48 };
   if (scene === "charged") state.charge = { x: 0.56, y: 0.5 };
-  if (scene === "tip" || scene === "dumbbell") state.charge = { x: 0.26, y: 0.5 };
+  if (scene === "tip" || scene === "rod" || scene === "dumbbell") state.charge = { x: 0.26, y: 0.5 };
   if (scene === "solid" || scene === "shield") state.charge = { x: 0.23, y: 0.5 };
   document.querySelectorAll(".segment").forEach((button) => {
     button.classList.toggle("active", button.dataset.scene === scene);
@@ -540,6 +653,7 @@ function updateText() {
     shield: `当前外部${signWord}靠近带空腔导体，电荷量 ${amountWord}。模型区分导体材料内部 E=0 与空腔区域是否受影响。`,
     cavity: `当前${signWord}位于空腔内，电荷量 ${amountWord}。内表面出现异号感应电荷，分布随电荷位置连续改变。`,
     tip: `当前为尖端导体边界元求解模型，净电荷量 ${amountWord}，表面电荷与电场线均由等势边界条件和净电荷约束计算得到。`,
+    rod: "当前为避雷针演示器示意模型：上方带电板与下方金属球、尖端针形成电势差。模型突出比较球面和尖端附近电场线疏密。",
     dumbbell: `当前为哑铃形导体边界元求解模型，净电荷量 ${amountWord}，用两个相连球形导体对比外侧凸起和连接区域的表面电荷密度差异。`
   };
   els.aiSummary.textContent = state.prediction
@@ -568,7 +682,10 @@ function getStudentChecks() {
     return ["外部电荷只改变外表面分布。", "空腔内部不出现外部电场线。", "导体材料内部保持 E=0。"];
   }
   if (state.scene === "tip") {
-    return ["尖端附近求解出的电荷点更密。", "电场线由合电场积分追踪。", "导体边界满足等势条件。"];
+    return ["电场线已加粗，便于投屏观察。", "尖端附近线条更密，表示场强更大。", "导体边界满足等势条件。"];
+  }
+  if (state.scene === "rod") {
+    return ["金属球附近场线较稀疏、较均匀。", "尖端针附近场线明显集中。", "线密处表示场强更大，更容易击穿空气。"];
   }
   if (state.scene === "dumbbell") {
     return ["外侧凸起处电荷较密。", "两球连接附近电荷较少。", "整体仍是同一个等势导体。"];
@@ -608,6 +725,10 @@ function clearCanvas() {
 function draw() {
   const startedAt = performance.now();
   try {
+    if (state.scene === "rod") {
+      drawLightningRodScene(startedAt);
+      return;
+    }
     const solution = getBemSolution();
     advanceVisualState(solution);
     clearCanvas();
@@ -711,6 +832,23 @@ function updatePhysicsDiagnostics(elapsedMs = 0) {
   renderList(els.physicsChecks, items);
 }
 
+function updateLightningDiagnostics(elapsedMs = 0) {
+  const solution = getLightningSolution();
+  const tip = lightningLayout.needle.tip;
+  const ballTop = {
+    x: lightningLayout.ball.cx,
+    y: lightningLayout.ball.cy - nxToNyRadius(lightningLayout.ball.r) - 0.02
+  };
+  const tipField = lightningFieldMagnitudeAt(tip.x, tip.y - 0.035, solution);
+  const ballField = lightningFieldMagnitudeAt(ballTop.x, ballTop.y, solution);
+  const ratio = ballField > 1e-6 ? tipField / ballField : 0;
+  renderList(els.physicsChecks, [
+    "导体内部保持等势，场线不穿过金属。",
+    `尖端附近场强约为球顶的 ${ratio.toFixed(1)} 倍`,
+    `电势网格求解与绘制耗时：${elapsedMs.toFixed(1)} ms`
+  ]);
+}
+
 function drawConductor() {
   if (state.scene === "solid" || state.scene === "charged") {
     drawDisk(0.56, 0.5, 0.2);
@@ -721,6 +859,17 @@ function drawConductor() {
   } else {
     drawPolygonConductor(getBemSolution().geometry.conductors[0].polygon);
   }
+}
+
+function drawLightningRodScene(startedAt) {
+  const solution = getLightningSolution();
+  clearCanvas();
+  if (!state.prediction && state.showEquipotentials) drawLightningEquipotentials(solution);
+  if (!state.prediction && state.showLines) drawLightningFieldLines(solution);
+  drawLightningApparatus();
+  if (!state.prediction && state.showCharges) drawLightningSurfaceCharges();
+  if (state.showLabels) drawLabels();
+  updateLightningDiagnostics(performance.now() - startedAt);
 }
 
 function drawDisk(cx, cy, r) {
@@ -870,6 +1019,84 @@ function drawSurfaceDot(x, y, sign, radius) {
   ctx.restore();
 }
 
+function drawLightningApparatus() {
+  const { plate, ball, needle } = lightningLayout;
+  ctx.save();
+
+  ctx.fillStyle = "#d7dee3";
+  ctx.strokeStyle = "#6f7e89";
+  ctx.lineWidth = 3;
+  ctx.fillRect(sx(plate.x), sy(plate.y), sx(plate.w), sy(plate.h));
+  ctx.strokeRect(sx(plate.x), sy(plate.y), sx(plate.w), sy(plate.h));
+
+  drawDisk(ball.cx, ball.cy, ball.r);
+  ctx.fillStyle = "#b9c4cc";
+  ctx.fillRect(sx(ball.cx - 0.012), sy(ball.cy + nxToNyRadius(ball.r) * 0.85), sx(0.024), sy(0.18));
+  ctx.strokeStyle = "#7f8e99";
+  ctx.strokeRect(sx(ball.cx - 0.012), sy(ball.cy + nxToNyRadius(ball.r) * 0.85), sx(0.024), sy(0.18));
+
+  const grad = ctx.createLinearGradient(sx(needle.leftBase.x), sy(needle.leftBase.y), sx(needle.tip.x), sy(needle.tip.y));
+  grad.addColorStop(0, "#d8e1e6");
+  grad.addColorStop(1, "#eef3f6");
+  ctx.beginPath();
+  ctx.moveTo(sx(needle.tip.x), sy(needle.tip.y));
+  ctx.lineTo(sx(needle.rightBase.x), sy(needle.rightBase.y));
+  ctx.lineTo(sx(needle.leftBase.x), sy(needle.leftBase.y));
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.strokeStyle = "#6f7e89";
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+
+  ctx.fillStyle = "#b9c4cc";
+  ctx.fillRect(sx(needle.stemLeft), sy(0.78), sx(needle.stemRight - needle.stemLeft), sy(0.13));
+  ctx.strokeRect(sx(needle.stemLeft), sy(0.78), sx(needle.stemRight - needle.stemLeft), sy(0.13));
+
+  ctx.restore();
+}
+
+function drawLightningSurfaceCharges() {
+  const { plate, ball, needle } = lightningLayout;
+  const plateSign = state.chargeSign > 0 ? 1 : -1;
+  const conductorSign = -plateSign;
+  for (let i = 0; i < 15; i += 1) {
+    const x = plate.x + 0.035 + i * (plate.w - 0.07) / 14;
+    drawChargeMark(x, plate.y + plate.h * 0.52, plateSign, 15);
+  }
+  for (let i = 0; i < 14; i += 1) {
+    const angle = -Math.PI * 0.88 + i * Math.PI * 0.76 / 13;
+    const p = circlePoint(ball.cx, ball.cy, ball.r, angle, 0.008);
+    drawSurfaceDot(p.x, p.y, conductorSign, 4.2);
+  }
+  const tip = needle.tip;
+  for (let i = 0; i < 18; i += 1) {
+    const t = i / 17;
+    const side = i % 2 === 0 ? needle.leftBase : needle.rightBase;
+    const x = tip.x + (side.x - tip.x) * Math.min(0.34, t * 0.42);
+    const y = tip.y + (side.y - tip.y) * Math.min(0.34, t * 0.42);
+    drawSurfaceDot(x, y, conductorSign, 3.8 + (1 - t) * 3.6);
+  }
+}
+
+function drawChargeMark(x, y, sign, size) {
+  ctx.save();
+  ctx.strokeStyle = sign > 0 ? "#b9424a" : "#2367a3";
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(sx(x) - size * 0.45, sy(y));
+  ctx.lineTo(sx(x) + size * 0.45, sy(y));
+  ctx.stroke();
+  if (sign > 0) {
+    ctx.beginPath();
+    ctx.moveTo(sx(x), sy(y) - size * 0.45);
+    ctx.lineTo(sx(x), sy(y) + size * 0.45);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawEquipotentialLines() {
   const solution = getBemSolution();
   const grid = makePotentialGrid(solution, 104, 68);
@@ -880,6 +1107,32 @@ function drawEquipotentialLines() {
   ctx.lineWidth = 1.1;
   ctx.setLineDash([5, 6]);
   levels.forEach(level => drawPotentialContour(grid, level));
+  ctx.restore();
+}
+
+function drawLightningEquipotentials(solution) {
+  const cells = [];
+  const values = [];
+  for (let row = 0; row <= solution.rows; row += 1) {
+    const line = [];
+    for (let col = 0; col <= solution.cols; col += 1) {
+      const x = col / solution.cols;
+      const y = row / solution.rows;
+      const material = lightningMaterialAt({ x, y });
+      const value = solution.values[row][col];
+      const drawable = !material && Number.isFinite(value);
+      if (drawable) values.push(value);
+      line.push({ x, y, value, drawable });
+    }
+    cells.push(line);
+  }
+  const levels = makeEquipotentialLevels(values);
+  if (!levels.length) return;
+  ctx.save();
+  ctx.strokeStyle = "rgba(92, 112, 126, 0.26)";
+  ctx.lineWidth = 1.15;
+  ctx.setLineDash([5, 7]);
+  levels.forEach(level => drawPotentialContour({ cols: solution.cols, rows: solution.rows, cells }, level));
   ctx.restore();
 }
 
@@ -964,12 +1217,25 @@ function drawContourSegment(a, b) {
 
 function drawFieldLines() {
   ctx.save();
-  const lineAlpha = 0.34 + visualState.fieldLineAlpha * 0.42;
+  const lineAlpha = state.scene === "tip" ? 0.54 + visualState.fieldLineAlpha * 0.36 : 0.34 + visualState.fieldLineAlpha * 0.42;
   ctx.globalAlpha = lineAlpha;
   ctx.strokeStyle = "rgba(31, 97, 125, 0.55)";
-  ctx.lineWidth = 1.65;
+  ctx.lineWidth = state.scene === "tip" ? 2.45 : 1.65;
   ctx.lineCap = "round";
   drawBemFieldLines();
+  ctx.restore();
+}
+
+function drawLightningFieldLines(solution) {
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  ctx.strokeStyle = "rgba(31, 97, 125, 0.62)";
+  ctx.lineWidth = 2.35;
+  ctx.lineCap = "round";
+  makeLightningSeeds().forEach((seed) => {
+    const path = traceLightningPath(seed, solution);
+    drawFieldPath(path, state.chargeSign < 0);
+  });
   ctx.restore();
 }
 
@@ -1068,7 +1334,8 @@ function makeFieldSeeds(solution) {
   const sourceFlux = Math.max(0, source.q);
   const fluxTotal = sourceFlux + positiveBoundaryFlux;
   const baseLineBudget = state.dragging ? fieldLineConfig.maxLinesDragging : fieldLineConfig.maxLines;
-  const lineBudget = Math.round(baseLineBudget * clamp(0.65 + state.chargeMagnitude * 0.35, 0.7, 1.35));
+  const sceneBoost = state.scene === "tip" ? 1.55 : 1;
+  const lineBudget = Math.round(baseLineBudget * sceneBoost * clamp(0.65 + state.chargeMagnitude * 0.35, 0.7, 1.35));
   const sourceSeedCount = sourceFlux > 0
     ? clamp(
       Math.round((sourceFlux / Math.max(fluxTotal, sourceFlux)) * lineBudget),
@@ -1087,6 +1354,61 @@ function makeFieldSeeds(solution) {
   seeds.push(...makeBoundaryFluxSeeds(solution, boundaryBudget));
 
   return seeds.slice(0, lineBudget);
+}
+
+function makeLightningSeeds() {
+  const seeds = [];
+  for (let i = 0; i < 9; i += 1) {
+    const t = i / 8;
+    seeds.push({ x: 0.2 + t * 0.23, y: lightningLayout.plate.y + lightningLayout.plate.h + 0.012 });
+  }
+  for (let i = 0; i < 26; i += 1) {
+    const t = i / 25;
+    const centered = (t - 0.5) * 2;
+    const x = lightningLayout.needle.tip.x + Math.sign(centered) * Math.abs(centered) ** 1.55 * 0.17;
+    seeds.push({ x, y: lightningLayout.plate.y + lightningLayout.plate.h + 0.012 });
+  }
+  for (let i = 0; i < 8; i += 1) {
+    const t = i / 7;
+    seeds.push({ x: 0.48 + t * 0.34, y: lightningLayout.plate.y + lightningLayout.plate.h + 0.012 });
+  }
+  return seeds;
+}
+
+function lightningFieldAt(point, solution) {
+  const col = Math.round(clamp(point.x * solution.cols, 1, solution.cols - 1));
+  const row = Math.round(clamp(point.y * solution.rows, 1, solution.rows - 1));
+  const dvx = solution.values[row][col + 1] - solution.values[row][col - 1];
+  const dvy = solution.values[row + 1][col] - solution.values[row - 1][col];
+  const sign = state.chargeSign > 0 ? 1 : -1;
+  return {
+    x: -dvx * sign,
+    y: -dvy * sign
+  };
+}
+
+function lightningFieldMagnitudeAt(x, y, solution) {
+  const field = lightningFieldAt({ x, y }, solution);
+  return Math.hypot(field.x, field.y);
+}
+
+function traceLightningPath(seed, solution) {
+  let point = { ...seed };
+  const path = [point];
+  for (let step = 0; step < 360; step += 1) {
+    const field = lightningFieldAt(point, solution);
+    const mag = Math.hypot(field.x, field.y);
+    if (!Number.isFinite(mag) || mag < 1e-6) break;
+    const next = {
+      x: point.x + (field.x / mag) * 0.006,
+      y: point.y + (field.y / mag) * 0.006
+    };
+    if (next.x < 0.025 || next.x > 0.975 || next.y < 0.025 || next.y > 0.96) break;
+    if (lightningMaterialAt(next) && path.length > 2) break;
+    path.push(next);
+    point = next;
+  }
+  return path;
 }
 
 function makeBoundaryFluxSeeds(solution, budget) {
@@ -1318,6 +1640,10 @@ function drawLabels() {
   } else if (state.scene === "tip") {
     drawBadge(0.76, 0.42, "尖端附近电场更强", "#334155");
     drawBadge(0.5, 0.68, "同一导体表面电荷不均匀", "#334155");
+  } else if (state.scene === "rod") {
+    drawBadge(0.31, 0.42, "金属球：较稀疏、较均匀", "#334155");
+    drawBadge(0.71, 0.31, "尖端：电场线密集", "#334155");
+    drawBadge(0.5, 0.21, "带电金属板", "#334155");
   } else if (state.scene === "dumbbell") {
     drawBadge(0.31, 0.42, "左侧外凸面", "#334155");
     drawBadge(0.74, 0.42, "右侧外凸面", "#334155");
@@ -1443,6 +1769,11 @@ els.chargeAmount.addEventListener("input", () => {
 
 document.querySelector("#resetBtn").addEventListener("click", () => setScene(state.scene));
 
+window.addEventListener("hashchange", () => {
+  const scene = location.hash.slice(1);
+  if (validScenes.includes(scene) && scene !== state.scene) setScene(scene);
+});
+
 function constrainCharge(point) {
   if (state.scene === "charged") {
     return { x: 0.56, y: 0.5 };
@@ -1486,7 +1817,7 @@ function constrainCharge(point) {
   };
 }
 
-const initialScene = ["solid", "charged", "shield", "cavity", "tip", "dumbbell"].includes(location.hash.slice(1))
+const initialScene = validScenes.includes(location.hash.slice(1))
   ? location.hash.slice(1)
   : state.scene;
 setScene(initialScene);
