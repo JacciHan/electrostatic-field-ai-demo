@@ -19,6 +19,11 @@ const bemCache = {
   solution: null
 };
 
+const rodBemCache = {
+  key: "",
+  solution: null
+};
+
 let drawQueued = false;
 
 const visualState = {
@@ -330,6 +335,54 @@ function makeDumbbellBoundary() {
   return makePolygonBoundary(points, "outer");
 }
 
+function makeRectangleBoundary(rect, countX, countY, role) {
+  const points = [];
+  for (let i = 0; i < countX; i += 1) {
+    const t = i / countX;
+    points.push({ x: rect.x + rect.w * t, y: rect.y });
+  }
+  for (let i = 0; i < countY; i += 1) {
+    const t = i / countY;
+    points.push({ x: rect.x + rect.w, y: rect.y + rect.h * t });
+  }
+  for (let i = 0; i < countX; i += 1) {
+    const t = i / countX;
+    points.push({ x: rect.x + rect.w * (1 - t), y: rect.y + rect.h });
+  }
+  for (let i = 0; i < countY; i += 1) {
+    const t = i / countY;
+    points.push({ x: rect.x, y: rect.y + rect.h * (1 - t) });
+  }
+  return makePolygonBoundary(points, role);
+}
+
+function rectPolygon(rect) {
+  return [
+    { x: rect.x, y: rect.y },
+    { x: rect.x + rect.w, y: rect.y },
+    { x: rect.x + rect.w, y: rect.y + rect.h },
+    { x: rect.x, y: rect.y + rect.h }
+  ];
+}
+
+function makeNeedleElectrodeBoundary() {
+  const { needle } = lightningLayout;
+  const points = [];
+  const appendLine = (from, to, count) => {
+    for (let i = 0; i < count; i += 1) {
+      const t = i / count;
+      points.push({
+        x: from.x + (to.x - from.x) * t,
+        y: from.y + (to.y - from.y) * t
+      });
+    }
+  };
+  appendLine(needle.tip, needle.rightBase, 28);
+  appendLine(needle.rightBase, needle.leftBase, 8);
+  appendLine(needle.leftBase, needle.tip, 28);
+  return makePolygonBoundary(points, "rodConductor");
+}
+
 function makeBemGeometry() {
   if (state.scene === "solid") {
     return {
@@ -467,6 +520,107 @@ function applyPhysicalChargeCorrections(boundaries, charges) {
   return corrected;
 }
 
+function getRodBemSolution() {
+  const key = [
+    canvas.width,
+    canvas.height,
+    state.chargeMagnitude.toFixed(2)
+  ].join("|");
+  if (rodBemCache.key === key) return rodBemCache.solution;
+
+  const potentialScale = state.chargeMagnitude;
+  const { ballPlate, needlePlate, ball } = lightningLayout;
+  const groups = [
+    {
+      kind: "ball",
+      plate: ballPlate,
+      boundaries: [
+        ...makeRectangleBoundary(ballPlate, 18, 3, "rodPlate"),
+        ...makeBoundaryCircle(ball.cx, ball.cy, ball.r, 56, "rodConductor")
+      ],
+      conductors: [
+        { type: "polygon", polygon: rectPolygon(ballPlate) },
+        { type: "solid", cx: ball.cx, cy: ball.cy, outer: ball.r }
+      ],
+      seeds: [0.10, 0.24, 0.38, 0.50, 0.62, 0.76, 0.90]
+    },
+    {
+      kind: "needle",
+      plate: needlePlate,
+      boundaries: [
+        ...makeRectangleBoundary(needlePlate, 18, 3, "rodPlate"),
+        ...makeNeedleElectrodeBoundary()
+      ],
+      conductors: [
+        { type: "polygon", polygon: rectPolygon(needlePlate) },
+        { type: "polygon", polygon: [
+          lightningLayout.needle.tip,
+          lightningLayout.needle.rightBase,
+          lightningLayout.needle.leftBase
+        ] }
+      ],
+      seeds: [0.12, 0.24, 0.35, 0.44, 0.50, 0.56, 0.65, 0.76, 0.88]
+    }
+  ].map(group => solveRodBemGroup(group, potentialScale));
+
+  const solution = { groups };
+  rodBemCache.key = key;
+  rodBemCache.solution = solution;
+  return solution;
+}
+
+function solveRodBemGroup(group, potentialScale) {
+  const n = group.boundaries.length;
+  const matrix = Array.from({ length: n }, () => Array(n).fill(0));
+  const vector = Array(n).fill(0);
+  for (let i = 0; i < n; i += 1) {
+    for (let j = 0; j < n; j += 1) {
+      matrix[i][j] = green(group.boundaries[i], group.boundaries[j], i === j ? group.boundaries[j].segment : 0);
+    }
+    vector[i] = group.boundaries[i].role === "rodPlate" ? potentialScale : 0;
+  }
+  return {
+    ...group,
+    charges: solveLinearSystem(matrix, vector)
+  };
+}
+
+function rodPotentialAt(point, group) {
+  return group.boundaries.reduce((sum, boundary, index) => (
+    sum + group.charges[index] * green(point, boundary)
+  ), 0);
+}
+
+function rodBoundaryPotentialAt(group, boundaryIndex) {
+  const point = group.boundaries[boundaryIndex];
+  return group.boundaries.reduce((sum, boundary, index) => (
+    sum + group.charges[index] * green(point, boundary, index === boundaryIndex ? boundary.segment : 0)
+  ), 0);
+}
+
+function rodFieldAt(point, group) {
+  const p = toPhys(point);
+  let ex = 0;
+  let ey = 0;
+  group.boundaries.forEach((boundary, index) => {
+    const q = group.charges[index];
+    const bp = toPhys(boundary);
+    const dx = p.x - bp.x;
+    const dy = p.y - bp.y;
+    const r2 = Math.max(0.00002, dx * dx + dy * dy);
+    ex += q * dx / r2;
+    ey += q * dy / r2;
+  });
+  return { x: ex, y: ey };
+}
+
+function isInRodGroupConductor(point, group) {
+  return group.conductors.some((conductor) => {
+    if (conductor.type === "polygon") return pointInPolygon(point, conductor.polygon);
+    return physDistance(point, conductor) < conductor.outer;
+  });
+}
+
 function fieldAt(point, solution) {
   const p = toPhys(point);
   let ex = 0;
@@ -561,7 +715,7 @@ function updateText() {
     shield: `当前外部${signWord}靠近带空腔导体，电荷量 ${amountWord}。模型区分导体材料内部 E=0 与空腔区域是否受影响。`,
     cavity: `当前${signWord}位于空腔内，电荷量 ${amountWord}。内表面出现异号感应电荷，分布随电荷位置连续改变。`,
     tip: `当前为尖端导体边界元求解模型，净电荷量 ${amountWord}，表面电荷与电场线均由等势边界条件和净电荷约束计算得到。`,
-    rod: "当前为避雷针教具插图：两组独立带电板分别对比金属球和尖端针。线条经过课堂强化，但保持场线不穿导体、近表面近似垂直等基本约束。",
+    rod: "当前为避雷针数值演示：两组独立电极分别用 Dirichlet BEM 求解，再对比金属球和尖端针附近电场线的疏密差异。",
     dumbbell: `当前为哑铃形导体边界元求解模型，净电荷量 ${amountWord}，用两个相连球形导体对比外侧凸起和连接区域的表面电荷密度差异。`
   };
   els.aiSummary.textContent = state.prediction
@@ -742,11 +896,19 @@ function updatePhysicsDiagnostics(elapsedMs = 0) {
 }
 
 function updateLightningDiagnostics(elapsedMs = 0) {
+  const solution = getRodBemSolution();
+  const errors = solution.groups.map((group) => {
+    const maxError = Math.max(...group.boundaries.map((boundary, boundaryIndex) => {
+      const target = boundary.role === "rodPlate" ? state.chargeMagnitude : 0;
+      return Math.abs(rodBoundaryPotentialAt(group, boundaryIndex) - target);
+    }));
+    return `${group.kind === "ball" ? "球组" : "尖端组"} ${maxError.toExponential(2)}`;
+  });
   renderList(els.physicsChecks, [
     "左右两组独立电极互不连通，避免互相影响。",
-    "球形导体场线按半径入射，垂直于球面。",
+    `Dirichlet BEM 边界误差：${errors.join(" / ")}`,
     "场线不穿过金属，导体内部保持 E = 0。",
-    `教具插图绘制耗时：${elapsedMs.toFixed(1)} ms`
+    `数值求解与绘制耗时：${elapsedMs.toFixed(1)} ms`
   ]);
 }
 
@@ -972,30 +1134,33 @@ function drawLightningPlate(plate) {
 }
 
 function drawLightningSurfaceCharges() {
-  const { ballPlate, needlePlate, ball, needle } = lightningLayout;
-  const plateSign = state.chargeSign > 0 ? 1 : -1;
-  const conductorSign = -plateSign;
-  [ballPlate, needlePlate].forEach((plate) => {
-    for (let i = 0; i < 5; i += 1) {
-      const x = plate.x + 0.04 + i * (plate.w - 0.08) / 4;
-      drawChargeMark(x, plate.y + plate.h * 0.52, plateSign, 12);
-    }
-  });
-  for (let i = 0; i < 7; i += 1) {
-    const angle = -Math.PI * 0.77 + i * Math.PI * 0.54 / 6;
-    const p = circlePoint(ball.cx, ball.cy, ball.r, angle, 0.008);
-    drawSurfaceDot(p.x, p.y, conductorSign, 3.8);
-  }
-  const tip = needle.tip;
-  for (let i = 0; i < 6; i += 1) {
-    const t = i / 5;
-    const extent = Math.min(0.27, t * 0.34);
-    [needle.leftBase, needle.rightBase].forEach((side) => {
-      const x = tip.x + (side.x - tip.x) * extent;
-      const y = tip.y + (side.y - tip.y) * extent;
-      drawSurfaceDot(x, y, conductorSign, 3.4 + (1 - t) * 3.2);
+  getRodBemSolution().groups.forEach((group) => {
+    const conductorMaxAbs = Math.max(
+      ...group.charges
+        .filter((_, index) => group.boundaries[index].role === "rodConductor")
+        .map(charge => Math.abs(charge)),
+      1e-6
+    );
+    group.boundaries.forEach((boundary, index) => {
+      const q = group.charges[index] * state.chargeSign;
+      if (boundary.role === "rodPlate") {
+        const bottomY = group.plate.y + group.plate.h;
+        const isFacingSurface = Math.abs(boundary.y - bottomY) < 0.003;
+        const isInterior = boundary.x > group.plate.x + 0.025 && boundary.x < group.plate.x + group.plate.w - 0.025;
+        if (!isFacingSurface || !isInterior || index % 2 !== 0) return;
+        const p = offsetBoundaryPoint(boundary, 0.008);
+        drawChargeMark(p.x, p.y, state.chargeSign, 8.5);
+        return;
+      }
+      const strength = Math.abs(q) / conductorMaxAbs;
+      if (strength < 0.08) return;
+      if (group.kind === "ball" && boundary.y > lightningLayout.ball.cy + 0.025) return;
+      if (group.kind === "needle" && boundary.y > lightningLayout.needle.tip.y + 0.16) return;
+      if (index % (group.kind === "needle" ? 1 : 2) !== 0) return;
+      const p = offsetBoundaryPoint(boundary, 0.009);
+      drawSurfaceDot(p.x, p.y, q > 0 ? 1 : -1, 1.8 + Math.min(1.05, strength) * 4.4);
     });
-  }
+  });
 }
 
 function drawChargeMark(x, y, sign, size) {
@@ -1031,17 +1196,15 @@ function drawEquipotentialLines() {
 
 function drawLightningPotentialGuides() {
   ctx.save();
-  ctx.strokeStyle = "rgba(99, 118, 132, 0.12)";
-  ctx.lineWidth = 1.2;
-  ctx.setLineDash([8, 10]);
-  [
-    [0.18, 0.29, 0.24, 0.24, 0.44, 0.24, 0.50, 0.29],
-    [0.17, 0.50, 0.23, 0.61, 0.45, 0.61, 0.51, 0.50],
-    [0.18, 0.73, 0.25, 0.85, 0.43, 0.85, 0.50, 0.73],
-    [0.56, 0.29, 0.62, 0.24, 0.82, 0.24, 0.88, 0.29],
-    [0.56, 0.50, 0.62, 0.59, 0.82, 0.59, 0.88, 0.50],
-    [0.56, 0.70, 0.63, 0.80, 0.81, 0.80, 0.88, 0.70]
-  ].forEach(points => drawCubicStroke(...points));
+  ctx.strokeStyle = "rgba(99, 118, 132, 0.16)";
+  ctx.lineWidth = 1.05;
+  ctx.setLineDash([6, 8]);
+  getRodBemSolution().groups.forEach((group) => {
+    const grid = makeRodPotentialGrid(group, 58, 46);
+    [0.18, 0.34, 0.50, 0.66, 0.82]
+      .map(level => level * state.chargeMagnitude)
+      .forEach(level => drawRodPotentialContour(grid, level));
+  });
   ctx.restore();
 }
 
@@ -1082,6 +1245,56 @@ function makeEquipotentialLevels(values) {
 }
 
 function drawPotentialContour(grid, level) {
+  for (let row = 0; row < grid.rows; row += 1) {
+    for (let col = 0; col < grid.cols; col += 1) {
+      const p00 = grid.cells[row][col];
+      const p10 = grid.cells[row][col + 1];
+      const p11 = grid.cells[row + 1][col + 1];
+      const p01 = grid.cells[row + 1][col];
+      if (!p00.drawable || !p10.drawable || !p11.drawable || !p01.drawable) continue;
+      const intersections = [
+        contourEdgePoint(p00, p10, level),
+        contourEdgePoint(p10, p11, level),
+        contourEdgePoint(p11, p01, level),
+        contourEdgePoint(p01, p00, level)
+      ].filter(Boolean);
+      if (intersections.length === 2) {
+        drawContourSegment(intersections[0], intersections[1]);
+      } else if (intersections.length === 4) {
+        drawContourSegment(intersections[0], intersections[1]);
+        drawContourSegment(intersections[2], intersections[3]);
+      }
+    }
+  }
+}
+
+function makeRodPotentialGrid(group, cols, rows) {
+  const padX = 0.06;
+  const minX = group.plate.x - padX;
+  const maxX = group.plate.x + group.plate.w + padX;
+  const minY = 0.12;
+  const maxY = 0.86;
+  const cells = [];
+  for (let row = 0; row <= rows; row += 1) {
+    const line = [];
+    const y = minY + (row / rows) * (maxY - minY);
+    for (let col = 0; col <= cols; col += 1) {
+      const x = minX + (col / cols) * (maxX - minX);
+      const point = { x, y };
+      const drawable = !isInRodGroupConductor(point, group);
+      line.push({
+        x,
+        y,
+        value: drawable ? rodPotentialAt(point, group) : NaN,
+        drawable
+      });
+    }
+    cells.push(line);
+  }
+  return { cols, rows, cells };
+}
+
+function drawRodPotentialContour(grid, level) {
   for (let row = 0; row < grid.rows; row += 1) {
     for (let col = 0; col < grid.cols; col += 1) {
       const p00 = grid.cells[row][col];
@@ -1152,63 +1365,67 @@ function drawLightningFocusGlow() {
 function drawLightningIllustrationFieldLines() {
   const reverseArrows = state.chargeSign < 0;
   ctx.save();
-  ctx.globalAlpha = 0.94;
-  ctx.strokeStyle = "rgba(31, 97, 125, 0.58)";
-  ctx.lineWidth = 2.3;
   ctx.lineCap = "round";
-
-  const ballAxis = lightningLayout.ball.cx;
-  const ballLeftLines = [
-    makeBallNormalFieldLine(-2.52, 0.20),
-    makeBallNormalFieldLine(-2.10, 0.27),
-    makeBallNormalFieldLine(-1.78, 0.31)
-  ];
-  ballLeftLines.forEach((points) => {
-    drawCubicFieldPath(points, reverseArrows);
-    drawCubicFieldPath(mirrorCubicPoints(points, ballAxis), reverseArrows);
+  getRodBemSolution().groups.forEach((group) => {
+    ctx.globalAlpha = group.kind === "needle" ? 0.93 : 0.84;
+    ctx.strokeStyle = group.kind === "needle" ? "rgba(31, 97, 125, 0.68)" : "rgba(31, 97, 125, 0.54)";
+    ctx.lineWidth = group.kind === "needle" ? 2.25 : 1.9;
+    makeRodFieldSeeds(group).forEach((seed) => {
+      drawSmoothFieldPath(traceRodFieldPath(seed, group), reverseArrows);
+    });
   });
-  drawCubicFieldPath(makeBallNormalFieldLine(-Math.PI / 2, ballAxis), reverseArrows);
-
-  ctx.strokeStyle = "rgba(31, 97, 125, 0.66)";
-  ctx.lineWidth = 2.55;
-  const needleAxis = lightningLayout.needle.tip.x;
-  const tipLeftLines = [
-    [0.58, 0.19, 0.58, 0.29, 0.62, 0.35, 0.70, 0.39],
-    [0.62, 0.19, 0.62, 0.28, 0.65, 0.34, 0.708, 0.386],
-    [0.66, 0.19, 0.66, 0.28, 0.68, 0.34, 0.714, 0.382],
-    [0.70, 0.19, 0.70, 0.28, 0.71, 0.34, 0.719, 0.379]
-  ];
-  tipLeftLines.forEach((points) => {
-    drawCubicFieldPath(points, reverseArrows);
-    drawCubicFieldPath(mirrorCubicPoints(points, needleAxis), reverseArrows);
-  });
-  drawCubicFieldPath([needleAxis, 0.19, needleAxis, 0.28, needleAxis, 0.34, needleAxis, 0.378], reverseArrows);
   ctx.restore();
 }
 
-function makeBallNormalFieldLine(angle, startX) {
-  const { ball } = lightningLayout;
-  const endpoint = circlePoint(ball.cx, ball.cy, ball.r, angle, 0.006);
-  const normalControl = pointFromPixelVector(endpoint, angle, 62);
-  return [
-    startX,
-    0.19,
-    startX,
-    0.30,
-    normalControl.x,
-    normalControl.y,
-    endpoint.x,
-    endpoint.y
-  ];
+function makeRodFieldSeeds(group) {
+  return group.seeds.map(t => ({
+    x: group.plate.x + group.plate.w * t,
+    y: group.plate.y + group.plate.h + 0.016
+  }));
 }
 
-function mirrorCubicPoints(points, axisX) {
-  return points.map((value, index) => (index % 2 === 0 ? axisX * 2 - value : value));
+function traceRodFieldPath(seed, group) {
+  let point = { ...seed };
+  const path = [point];
+  const minX = group.plate.x - 0.075;
+  const maxX = group.plate.x + group.plate.w + 0.075;
+  for (let step = 0; step < 280; step += 1) {
+    const field = rodFieldAt(point, group);
+    const mag = Math.hypot(field.x, field.y);
+    if (!Number.isFinite(mag) || mag < 1e-6) break;
+    const phys = toPhys(point);
+    const next = fromPhys({
+      x: phys.x + (field.x / mag) * 0.0038,
+      y: phys.y + (field.y / mag) * 0.0038
+    });
+    if (next.x < minX || next.x > maxX || next.y < 0.08 || next.y > 0.94) break;
+    if (isInRodGroupConductor(next, group)) break;
+    path.push(next);
+    point = next;
+  }
+  return path;
 }
 
-function drawCubicFieldPath(points, reverseArrow = false) {
-  const path = makeCubicPath(points);
-  drawFieldPath(path, reverseArrow);
+function drawSmoothFieldPath(path, reverseArrow = false) {
+  if (path.length < 2) return;
+  ctx.beginPath();
+  ctx.moveTo(sx(path[0].x), sy(path[0].y));
+  for (let i = 1; i < path.length - 1; i += 1) {
+    const mid = {
+      x: (path[i].x + path[i + 1].x) / 2,
+      y: (path[i].y + path[i + 1].y) / 2
+    };
+    ctx.quadraticCurveTo(sx(path[i].x), sy(path[i].y), sx(mid.x), sy(mid.y));
+  }
+  const last = path[path.length - 1];
+  ctx.lineTo(sx(last.x), sy(last.y));
+  ctx.stroke();
+  const arrowIndex = Math.min(28, path.length - 1);
+  if (arrowIndex < 1) return;
+  const arrowPoint = path[arrowIndex];
+  const before = path[arrowIndex - 1];
+  const arrowAngle = Math.atan2(sy(arrowPoint.y) - sy(before.y), sx(arrowPoint.x) - sx(before.x));
+  drawArrowhead(arrowPoint.x, arrowPoint.y, arrowAngle + (reverseArrow ? Math.PI : 0));
 }
 
 function drawCubicStroke(x0, y0, x1, y1, x2, y2, x3, y3) {
@@ -1581,10 +1798,10 @@ function drawLabels() {
     drawBadge(0.76, 0.42, "尖端附近电场更强", "#334155");
     drawBadge(0.5, 0.68, "同一导体表面电荷不均匀", "#334155");
   } else if (state.scene === "rod") {
-    drawSmallBadge(0.34, 0.35, "金属球：场线较疏", "#334155");
-    drawSmallBadge(0.72, 0.31, "尖端：场线收束", "#334155");
-    drawSmallBadge(0.34, 0.22, "独立金属板", "#334155");
-    drawSmallBadge(0.72, 0.22, "独立金属板", "#334155");
+    drawSmallBadge(0.34, 0.35, "金属球", "#334155");
+    drawSmallBadge(0.72, 0.31, "尖端", "#334155");
+    drawSmallBadge(0.34, 0.22, "独立板", "#334155");
+    drawSmallBadge(0.72, 0.22, "独立板", "#334155");
   } else if (state.scene === "dumbbell") {
     drawBadge(0.31, 0.42, "左侧外凸面", "#334155");
     drawBadge(0.74, 0.42, "右侧外凸面", "#334155");
