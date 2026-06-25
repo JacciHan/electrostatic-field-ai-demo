@@ -1381,13 +1381,17 @@ function drawLightningIllustrationFieldLines() {
 function makeRodFieldSeeds(group) {
   return group.seeds.map(t => ({
     x: group.plate.x + group.plate.w * t,
+    plateY: group.plate.y + group.plate.h,
     y: group.plate.y + group.plate.h + 0.016
   }));
 }
 
 function traceRodFieldPath(seed, group) {
   let point = { ...seed };
-  const path = [point];
+  const path = [
+    { x: seed.x, y: seed.plateY + 0.002 },
+    { x: seed.x, y: seed.y }
+  ];
   const minX = group.plate.x - 0.075;
   const maxX = group.plate.x + group.plate.w + 0.075;
   for (let step = 0; step < 280; step += 1) {
