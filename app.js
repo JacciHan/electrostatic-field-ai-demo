@@ -559,7 +559,7 @@ function getRodBemSolution() {
           lightningLayout.needle.leftBase
         ] }
       ],
-      seeds: [0.12, 0.24, 0.35, 0.44, 0.50, 0.56, 0.65, 0.76, 0.88]
+      seeds: [0.10, 0.18, 0.26, 0.34, 0.40, 0.44, 0.47, 0.50, 0.53, 0.56, 0.60, 0.66, 0.74, 0.82, 0.90]
     }
   ].map(group => solveRodBemGroup(group, potentialScale));
 
@@ -1158,7 +1158,8 @@ function drawLightningSurfaceCharges() {
       if (group.kind === "needle" && boundary.y > lightningLayout.needle.tip.y + 0.16) return;
       if (index % (group.kind === "needle" ? 1 : 2) !== 0) return;
       const p = offsetBoundaryPoint(boundary, 0.009);
-      drawSurfaceDot(p.x, p.y, q > 0 ? 1 : -1, 1.8 + Math.min(1.05, strength) * 4.4);
+      const radiusBoost = group.kind === "needle" ? 1.15 : 1;
+      drawSurfaceDot(p.x, p.y, q > 0 ? 1 : -1, (1.8 + Math.min(1.05, strength) * 4.4) * radiusBoost);
     });
   });
 }
@@ -1367,9 +1368,9 @@ function drawLightningIllustrationFieldLines() {
   ctx.save();
   ctx.lineCap = "round";
   getRodBemSolution().groups.forEach((group) => {
-    ctx.globalAlpha = group.kind === "needle" ? 0.93 : 0.84;
-    ctx.strokeStyle = group.kind === "needle" ? "rgba(31, 97, 125, 0.68)" : "rgba(31, 97, 125, 0.54)";
-    ctx.lineWidth = group.kind === "needle" ? 2.25 : 1.9;
+    ctx.globalAlpha = group.kind === "needle" ? 0.96 : 0.84;
+    ctx.strokeStyle = group.kind === "needle" ? "rgba(31, 97, 125, 0.72)" : "rgba(31, 97, 125, 0.54)";
+    ctx.lineWidth = group.kind === "needle" ? 2.35 : 1.9;
     makeRodFieldSeeds(group).forEach((seed) => {
       drawSmoothFieldPath(traceRodFieldPath(seed, group), reverseArrows);
     });
@@ -1799,7 +1800,7 @@ function drawLabels() {
     drawBadge(0.5, 0.68, "同一导体表面电荷不均匀", "#334155");
   } else if (state.scene === "rod") {
     drawSmallBadge(0.34, 0.35, "金属球", "#334155");
-    drawSmallBadge(0.72, 0.31, "尖端", "#334155");
+    drawSmallBadge(0.775, 0.35, "尖端", "#334155");
     drawSmallBadge(0.34, 0.22, "独立板", "#334155");
     drawSmallBadge(0.72, 0.22, "独立板", "#334155");
   } else if (state.scene === "dumbbell") {
