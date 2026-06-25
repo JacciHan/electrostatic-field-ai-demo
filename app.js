@@ -47,8 +47,8 @@ const surfaceChargeScales = {
 };
 
 const lightningLayout = {
-  ballPlate: { x: 0.17, y: 0.15, w: 0.32, h: 0.035 },
-  needlePlate: { x: 0.55, y: 0.15, w: 0.32, h: 0.035 },
+  ballPlate: { x: 0.18, y: 0.15, w: 0.32, h: 0.035 },
+  needlePlate: { x: 0.56, y: 0.15, w: 0.32, h: 0.035 },
   ball: { cx: 0.34, cy: 0.55, r: 0.105 },
   needle: {
     tip: { x: 0.72, y: 0.38 },
@@ -987,12 +987,14 @@ function drawLightningSurfaceCharges() {
     drawSurfaceDot(p.x, p.y, conductorSign, 3.8);
   }
   const tip = needle.tip;
-  for (let i = 0; i < 12; i += 1) {
-    const t = i / 11;
-    const side = i % 2 === 0 ? needle.leftBase : needle.rightBase;
-    const x = tip.x + (side.x - tip.x) * Math.min(0.27, t * 0.34);
-    const y = tip.y + (side.y - tip.y) * Math.min(0.27, t * 0.34);
-    drawSurfaceDot(x, y, conductorSign, 3.4 + (1 - t) * 3.2);
+  for (let i = 0; i < 6; i += 1) {
+    const t = i / 5;
+    const extent = Math.min(0.27, t * 0.34);
+    [needle.leftBase, needle.rightBase].forEach((side) => {
+      const x = tip.x + (side.x - tip.x) * extent;
+      const y = tip.y + (side.y - tip.y) * extent;
+      drawSurfaceDot(x, y, conductorSign, 3.4 + (1 - t) * 3.2);
+    });
   }
 }
 
@@ -1033,12 +1035,12 @@ function drawLightningPotentialGuides() {
   ctx.lineWidth = 1.2;
   ctx.setLineDash([8, 10]);
   [
-    [0.18, 0.29, 0.24, 0.24, 0.41, 0.24, 0.48, 0.31],
-    [0.17, 0.50, 0.24, 0.61, 0.43, 0.61, 0.50, 0.50],
-    [0.18, 0.73, 0.25, 0.85, 0.42, 0.85, 0.49, 0.73],
-    [0.56, 0.29, 0.63, 0.24, 0.80, 0.24, 0.87, 0.31],
-    [0.55, 0.50, 0.62, 0.59, 0.80, 0.59, 0.88, 0.50],
-    [0.56, 0.70, 0.63, 0.80, 0.80, 0.80, 0.87, 0.70]
+    [0.18, 0.29, 0.24, 0.24, 0.44, 0.24, 0.50, 0.29],
+    [0.17, 0.50, 0.23, 0.61, 0.45, 0.61, 0.51, 0.50],
+    [0.18, 0.73, 0.25, 0.85, 0.43, 0.85, 0.50, 0.73],
+    [0.56, 0.29, 0.62, 0.24, 0.82, 0.24, 0.88, 0.29],
+    [0.56, 0.50, 0.62, 0.59, 0.82, 0.59, 0.88, 0.50],
+    [0.56, 0.70, 0.63, 0.80, 0.81, 0.80, 0.88, 0.70]
   ].forEach(points => drawCubicStroke(...points));
   ctx.restore();
 }
@@ -1155,32 +1157,37 @@ function drawLightningIllustrationFieldLines() {
   ctx.lineWidth = 2.3;
   ctx.lineCap = "round";
 
-  const ballLines = [
+  const ballAxis = lightningLayout.ball.cx;
+  const ballLeftLines = [
     [0.21, 0.19, 0.21, 0.30, 0.22, 0.38, 0.26, 0.46],
     [0.27, 0.19, 0.27, 0.30, 0.28, 0.37, 0.30, 0.41],
-    [0.34, 0.19, 0.34, 0.30, 0.34, 0.35, 0.34, 0.38],
-    [0.41, 0.19, 0.41, 0.30, 0.40, 0.37, 0.38, 0.41],
-    [0.47, 0.20, 0.49, 0.31, 0.47, 0.39, 0.42, 0.47],
-    [0.18, 0.22, 0.13, 0.34, 0.16, 0.47, 0.26, 0.56],
-    [0.49, 0.22, 0.54, 0.34, 0.52, 0.47, 0.42, 0.56]
+    [0.18, 0.22, 0.13, 0.34, 0.16, 0.47, 0.26, 0.56]
   ];
-  ballLines.forEach(points => drawCubicFieldPath(points, reverseArrows));
+  ballLeftLines.forEach((points) => {
+    drawCubicFieldPath(points, reverseArrows);
+    drawCubicFieldPath(mirrorCubicPoints(points, ballAxis), reverseArrows);
+  });
+  drawCubicFieldPath([ballAxis, 0.19, ballAxis, 0.30, ballAxis, 0.35, ballAxis, 0.38], reverseArrows);
 
   ctx.strokeStyle = "rgba(31, 97, 125, 0.66)";
   ctx.lineWidth = 2.55;
-  const tipLines = [
+  const needleAxis = lightningLayout.needle.tip.x;
+  const tipLeftLines = [
     [0.58, 0.19, 0.58, 0.29, 0.62, 0.35, 0.70, 0.39],
     [0.62, 0.19, 0.62, 0.28, 0.65, 0.34, 0.708, 0.386],
     [0.66, 0.19, 0.66, 0.28, 0.68, 0.34, 0.714, 0.382],
-    [0.70, 0.19, 0.70, 0.28, 0.71, 0.34, 0.719, 0.379],
-    [0.72, 0.19, 0.72, 0.28, 0.72, 0.34, 0.72, 0.378],
-    [0.74, 0.19, 0.74, 0.28, 0.73, 0.34, 0.721, 0.379],
-    [0.78, 0.19, 0.78, 0.29, 0.76, 0.35, 0.728, 0.386],
-    [0.82, 0.19, 0.82, 0.30, 0.79, 0.38, 0.735, 0.405],
-    [0.86, 0.22, 0.89, 0.35, 0.82, 0.43, 0.737, 0.415]
+    [0.70, 0.19, 0.70, 0.28, 0.71, 0.34, 0.719, 0.379]
   ];
-  tipLines.forEach(points => drawCubicFieldPath(points, reverseArrows));
+  tipLeftLines.forEach((points) => {
+    drawCubicFieldPath(points, reverseArrows);
+    drawCubicFieldPath(mirrorCubicPoints(points, needleAxis), reverseArrows);
+  });
+  drawCubicFieldPath([needleAxis, 0.19, needleAxis, 0.28, needleAxis, 0.34, needleAxis, 0.378], reverseArrows);
   ctx.restore();
+}
+
+function mirrorCubicPoints(points, axisX) {
+  return points.map((value, index) => (index % 2 === 0 ? axisX * 2 - value : value));
 }
 
 function drawCubicFieldPath(points, reverseArrow = false) {
@@ -1560,8 +1567,8 @@ function drawLabels() {
   } else if (state.scene === "rod") {
     drawSmallBadge(0.34, 0.35, "金属球：场线较疏", "#334155");
     drawSmallBadge(0.72, 0.31, "尖端：场线收束", "#334155");
-    drawSmallBadge(0.33, 0.22, "独立金属板", "#334155");
-    drawSmallBadge(0.71, 0.22, "独立金属板", "#334155");
+    drawSmallBadge(0.34, 0.22, "独立金属板", "#334155");
+    drawSmallBadge(0.72, 0.22, "独立金属板", "#334155");
   } else if (state.scene === "dumbbell") {
     drawBadge(0.31, 0.42, "左侧外凸面", "#334155");
     drawBadge(0.74, 0.42, "右侧外凸面", "#334155");
