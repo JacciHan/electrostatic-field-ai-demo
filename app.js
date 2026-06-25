@@ -542,7 +542,7 @@ function getRodBemSolution() {
         { type: "polygon", polygon: rectPolygon(ballPlate) },
         { type: "solid", cx: ball.cx, cy: ball.cy, outer: ball.r }
       ],
-      seeds: [0.10, 0.24, 0.38, 0.50, 0.62, 0.76, 0.90]
+      seeds: [0.26, 0.38, 0.50, 0.62, 0.74]
     },
     {
       kind: "needle",
@@ -559,7 +559,7 @@ function getRodBemSolution() {
           lightningLayout.needle.leftBase
         ] }
       ],
-      seeds: [0.10, 0.18, 0.26, 0.34, 0.40, 0.44, 0.47, 0.50, 0.53, 0.56, 0.60, 0.66, 0.74, 0.82, 0.90]
+      seeds: [0.26, 0.34, 0.40, 0.44, 0.47, 0.50, 0.53, 0.56, 0.60, 0.66, 0.74]
     }
   ].map(group => solveRodBemGroup(group, potentialScale));
 
