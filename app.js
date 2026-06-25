@@ -744,7 +744,7 @@ function updatePhysicsDiagnostics(elapsedMs = 0) {
 function updateLightningDiagnostics(elapsedMs = 0) {
   renderList(els.physicsChecks, [
     "左右两组独立电极互不连通，避免互相影响。",
-    "场线在导体表面附近近似垂直。",
+    "球形导体场线按半径入射，垂直于球面。",
     "场线不穿过金属，导体内部保持 E = 0。",
     `教具插图绘制耗时：${elapsedMs.toFixed(1)} ms`
   ]);
@@ -1159,15 +1159,15 @@ function drawLightningIllustrationFieldLines() {
 
   const ballAxis = lightningLayout.ball.cx;
   const ballLeftLines = [
-    [0.21, 0.19, 0.21, 0.30, 0.22, 0.38, 0.26, 0.46],
-    [0.27, 0.19, 0.27, 0.30, 0.28, 0.37, 0.30, 0.41],
-    [0.18, 0.22, 0.13, 0.34, 0.16, 0.47, 0.26, 0.56]
+    makeBallNormalFieldLine(-2.52, 0.20),
+    makeBallNormalFieldLine(-2.10, 0.27),
+    makeBallNormalFieldLine(-1.78, 0.31)
   ];
   ballLeftLines.forEach((points) => {
     drawCubicFieldPath(points, reverseArrows);
     drawCubicFieldPath(mirrorCubicPoints(points, ballAxis), reverseArrows);
   });
-  drawCubicFieldPath([ballAxis, 0.19, ballAxis, 0.30, ballAxis, 0.35, ballAxis, 0.38], reverseArrows);
+  drawCubicFieldPath(makeBallNormalFieldLine(-Math.PI / 2, ballAxis), reverseArrows);
 
   ctx.strokeStyle = "rgba(31, 97, 125, 0.66)";
   ctx.lineWidth = 2.55;
@@ -1184,6 +1184,22 @@ function drawLightningIllustrationFieldLines() {
   });
   drawCubicFieldPath([needleAxis, 0.19, needleAxis, 0.28, needleAxis, 0.34, needleAxis, 0.378], reverseArrows);
   ctx.restore();
+}
+
+function makeBallNormalFieldLine(angle, startX) {
+  const { ball } = lightningLayout;
+  const endpoint = circlePoint(ball.cx, ball.cy, ball.r, angle, 0.006);
+  const normalControl = pointFromPixelVector(endpoint, angle, 62);
+  return [
+    startX,
+    0.19,
+    startX,
+    0.30,
+    normalControl.x,
+    normalControl.y,
+    endpoint.x,
+    endpoint.y
+  ];
 }
 
 function mirrorCubicPoints(points, axisX) {
