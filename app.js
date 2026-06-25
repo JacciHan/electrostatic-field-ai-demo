@@ -47,8 +47,9 @@ const surfaceChargeScales = {
 };
 
 const lightningLayout = {
-  plate: { x: 0.18, y: 0.15, w: 0.64, h: 0.035 },
-  ball: { cx: 0.34, cy: 0.62, r: 0.105 },
+  ballPlate: { x: 0.17, y: 0.15, w: 0.32, h: 0.035 },
+  needlePlate: { x: 0.55, y: 0.15, w: 0.32, h: 0.035 },
+  ball: { cx: 0.34, cy: 0.55, r: 0.105 },
   needle: {
     tip: { x: 0.72, y: 0.38 },
     leftBase: { x: 0.695, y: 0.76 },
@@ -88,7 +89,7 @@ const sceneMeta = {
   },
   rod: {
     title: "避雷针演示器：金属球与尖端对比",
-    lead: "对照实物装置：同一带电板下，比较金属球和尖端针附近电场线的疏密差异。",
+    lead: "对照实物装置：两组独立带电板分别作用于金属球和尖端针，只比较两者附近电场线的疏密差异。",
     question: "同样靠近带电板，为什么尖端针附近更容易出现放电？"
   },
   dumbbell: {
@@ -560,7 +561,7 @@ function updateText() {
     shield: `当前外部${signWord}靠近带空腔导体，电荷量 ${amountWord}。模型区分导体材料内部 E=0 与空腔区域是否受影响。`,
     cavity: `当前${signWord}位于空腔内，电荷量 ${amountWord}。内表面出现异号感应电荷，分布随电荷位置连续改变。`,
     tip: `当前为尖端导体边界元求解模型，净电荷量 ${amountWord}，表面电荷与电场线均由等势边界条件和净电荷约束计算得到。`,
-    rod: "当前为避雷针教具插图：在同一带电板下对比金属球和尖端针。线条经过课堂强化，但保持场线不穿导体、近表面近似垂直等基本约束。",
+    rod: "当前为避雷针教具插图：两组独立带电板分别对比金属球和尖端针。线条经过课堂强化，但保持场线不穿导体、近表面近似垂直等基本约束。",
     dumbbell: `当前为哑铃形导体边界元求解模型，净电荷量 ${amountWord}，用两个相连球形导体对比外侧凸起和连接区域的表面电荷密度差异。`
   };
   els.aiSummary.textContent = state.prediction
@@ -592,7 +593,7 @@ function getStudentChecks() {
     return ["电场线已加粗，便于投屏观察。", "尖端附近线条更密，表示场强更大。", "导体边界满足等势条件。"];
   }
   if (state.scene === "rod") {
-    return ["金属球附近场线较疏，分布更均匀。", "尖端附近场线明显收束，表示局部场强更大。", "这是服务课堂比较的教具插图，不是复杂数值仿真。"];
+    return ["两组装置互不连线，只做并列比较。", "金属球附近场线较疏，分布更均匀。", "尖端附近场线明显收束，表示局部场强更大。"];
   }
   if (state.scene === "dumbbell") {
     return ["外侧凸起处电荷较密。", "两球连接附近电荷较少。", "整体仍是同一个等势导体。"];
@@ -742,6 +743,7 @@ function updatePhysicsDiagnostics(elapsedMs = 0) {
 
 function updateLightningDiagnostics(elapsedMs = 0) {
   renderList(els.physicsChecks, [
+    "左右两组独立电极互不连通，避免互相影响。",
     "场线在导体表面附近近似垂直。",
     "场线不穿过金属，导体内部保持 E = 0。",
     `教具插图绘制耗时：${elapsedMs.toFixed(1)} ms`
@@ -919,14 +921,11 @@ function drawSurfaceDot(x, y, sign, radius) {
 }
 
 function drawLightningApparatus() {
-  const { plate, ball, needle } = lightningLayout;
+  const { ballPlate, needlePlate, ball, needle } = lightningLayout;
   ctx.save();
 
-  ctx.fillStyle = "#dbe3e8";
-  ctx.strokeStyle = "#7a8993";
-  ctx.lineWidth = 2.2;
-  ctx.fillRect(sx(plate.x), sy(plate.y), sx(plate.w), sy(plate.h));
-  ctx.strokeRect(sx(plate.x), sy(plate.y), sx(plate.w), sy(plate.h));
+  drawLightningPlate(ballPlate);
+  drawLightningPlate(needlePlate);
 
   drawDisk(ball.cx, ball.cy, ball.r);
   ctx.fillStyle = "#b9c4cc";
@@ -964,14 +963,24 @@ function drawLightningApparatus() {
   ctx.restore();
 }
 
+function drawLightningPlate(plate) {
+  ctx.fillStyle = "#dbe3e8";
+  ctx.strokeStyle = "#7a8993";
+  ctx.lineWidth = 2.2;
+  ctx.fillRect(sx(plate.x), sy(plate.y), sx(plate.w), sy(plate.h));
+  ctx.strokeRect(sx(plate.x), sy(plate.y), sx(plate.w), sy(plate.h));
+}
+
 function drawLightningSurfaceCharges() {
-  const { plate, ball, needle } = lightningLayout;
+  const { ballPlate, needlePlate, ball, needle } = lightningLayout;
   const plateSign = state.chargeSign > 0 ? 1 : -1;
   const conductorSign = -plateSign;
-  for (let i = 0; i < 9; i += 1) {
-    const x = plate.x + 0.055 + i * (plate.w - 0.11) / 8;
-    drawChargeMark(x, plate.y + plate.h * 0.52, plateSign, 12);
-  }
+  [ballPlate, needlePlate].forEach((plate) => {
+    for (let i = 0; i < 5; i += 1) {
+      const x = plate.x + 0.04 + i * (plate.w - 0.08) / 4;
+      drawChargeMark(x, plate.y + plate.h * 0.52, plateSign, 12);
+    }
+  });
   for (let i = 0; i < 7; i += 1) {
     const angle = -Math.PI * 0.77 + i * Math.PI * 0.54 / 6;
     const p = circlePoint(ball.cx, ball.cy, ball.r, angle, 0.008);
@@ -1024,9 +1033,12 @@ function drawLightningPotentialGuides() {
   ctx.lineWidth = 1.2;
   ctx.setLineDash([8, 10]);
   [
-    [0.20, 0.30, 0.37, 0.25, 0.52, 0.25, 0.70, 0.30],
-    [0.17, 0.42, 0.35, 0.35, 0.55, 0.35, 0.83, 0.42],
-    [0.18, 0.75, 0.36, 0.88, 0.59, 0.88, 0.84, 0.74]
+    [0.18, 0.29, 0.24, 0.24, 0.41, 0.24, 0.48, 0.31],
+    [0.17, 0.50, 0.24, 0.61, 0.43, 0.61, 0.50, 0.50],
+    [0.18, 0.73, 0.25, 0.85, 0.42, 0.85, 0.49, 0.73],
+    [0.56, 0.29, 0.63, 0.24, 0.80, 0.24, 0.87, 0.31],
+    [0.55, 0.50, 0.62, 0.59, 0.80, 0.59, 0.88, 0.50],
+    [0.56, 0.70, 0.63, 0.80, 0.80, 0.80, 0.87, 0.70]
   ].forEach(points => drawCubicStroke(...points));
   ctx.restore();
 }
@@ -1144,27 +1156,28 @@ function drawLightningIllustrationFieldLines() {
   ctx.lineCap = "round";
 
   const ballLines = [
-    [0.24, 0.19, 0.24, 0.34, 0.24, 0.43, 0.27, 0.52],
-    [0.30, 0.19, 0.30, 0.34, 0.30, 0.42, 0.31, 0.50],
-    [0.36, 0.19, 0.36, 0.34, 0.36, 0.42, 0.37, 0.50],
-    [0.42, 0.19, 0.43, 0.34, 0.43, 0.45, 0.40, 0.55],
-    [0.21, 0.22, 0.16, 0.35, 0.17, 0.49, 0.25, 0.59],
-    [0.48, 0.22, 0.54, 0.35, 0.53, 0.50, 0.43, 0.60]
+    [0.21, 0.19, 0.21, 0.30, 0.22, 0.38, 0.26, 0.46],
+    [0.27, 0.19, 0.27, 0.30, 0.28, 0.37, 0.30, 0.41],
+    [0.34, 0.19, 0.34, 0.30, 0.34, 0.35, 0.34, 0.38],
+    [0.41, 0.19, 0.41, 0.30, 0.40, 0.37, 0.38, 0.41],
+    [0.47, 0.20, 0.49, 0.31, 0.47, 0.39, 0.42, 0.47],
+    [0.18, 0.22, 0.13, 0.34, 0.16, 0.47, 0.26, 0.56],
+    [0.49, 0.22, 0.54, 0.34, 0.52, 0.47, 0.42, 0.56]
   ];
   ballLines.forEach(points => drawCubicFieldPath(points, reverseArrows));
 
   ctx.strokeStyle = "rgba(31, 97, 125, 0.66)";
   ctx.lineWidth = 2.55;
   const tipLines = [
-    [0.56, 0.19, 0.56, 0.28, 0.61, 0.34, 0.70, 0.39],
-    [0.60, 0.19, 0.60, 0.28, 0.64, 0.34, 0.708, 0.386],
-    [0.64, 0.19, 0.64, 0.28, 0.67, 0.34, 0.714, 0.382],
-    [0.68, 0.19, 0.68, 0.28, 0.70, 0.34, 0.719, 0.379],
+    [0.58, 0.19, 0.58, 0.29, 0.62, 0.35, 0.70, 0.39],
+    [0.62, 0.19, 0.62, 0.28, 0.65, 0.34, 0.708, 0.386],
+    [0.66, 0.19, 0.66, 0.28, 0.68, 0.34, 0.714, 0.382],
+    [0.70, 0.19, 0.70, 0.28, 0.71, 0.34, 0.719, 0.379],
     [0.72, 0.19, 0.72, 0.28, 0.72, 0.34, 0.72, 0.378],
-    [0.76, 0.19, 0.76, 0.28, 0.74, 0.34, 0.721, 0.379],
-    [0.80, 0.19, 0.80, 0.29, 0.76, 0.35, 0.728, 0.386],
-    [0.84, 0.22, 0.87, 0.35, 0.81, 0.42, 0.735, 0.405],
-    [0.52, 0.22, 0.48, 0.35, 0.58, 0.43, 0.697, 0.405]
+    [0.74, 0.19, 0.74, 0.28, 0.73, 0.34, 0.721, 0.379],
+    [0.78, 0.19, 0.78, 0.29, 0.76, 0.35, 0.728, 0.386],
+    [0.82, 0.19, 0.82, 0.30, 0.79, 0.38, 0.735, 0.405],
+    [0.86, 0.22, 0.89, 0.35, 0.82, 0.43, 0.737, 0.415]
   ];
   tipLines.forEach(points => drawCubicFieldPath(points, reverseArrows));
   ctx.restore();
@@ -1545,9 +1558,10 @@ function drawLabels() {
     drawBadge(0.76, 0.42, "尖端附近电场更强", "#334155");
     drawBadge(0.5, 0.68, "同一导体表面电荷不均匀", "#334155");
   } else if (state.scene === "rod") {
-    drawSmallBadge(0.34, 0.43, "金属球：场线较疏", "#334155");
+    drawSmallBadge(0.34, 0.35, "金属球：场线较疏", "#334155");
     drawSmallBadge(0.72, 0.31, "尖端：场线收束", "#334155");
-    drawSmallBadge(0.50, 0.22, "带电金属板", "#334155");
+    drawSmallBadge(0.33, 0.22, "独立金属板", "#334155");
+    drawSmallBadge(0.71, 0.22, "独立金属板", "#334155");
   } else if (state.scene === "dumbbell") {
     drawBadge(0.31, 0.42, "左侧外凸面", "#334155");
     drawBadge(0.74, 0.42, "右侧外凸面", "#334155");
