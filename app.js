@@ -746,80 +746,127 @@ function updateSolverConsole() {
     els.showBoundarySamples.checked = state.showBoundarySamples;
   }
   if (!state.showSolverConsole) return;
-  els.solverConsoleText.textContent = state.scene === "rod"
-    ? makeRodSolverConsoleText()
-    : makeGenericSolverConsoleText();
+  els.solverConsoleText.innerHTML = state.scene === "rod"
+    ? makeRodSolverConsoleHtml()
+    : makeGenericSolverConsoleHtml();
 }
 
-function makeRodSolverConsoleText() {
+function makeRodSolverConsoleHtml() {
   const solution = getRodBemSolution();
-  const groupLines = solution.groups.map((group) => {
+  const metrics = solution.groups.map((group) => {
     const maxError = Math.max(...group.boundaries.map((boundary, boundaryIndex) => {
       const target = boundary.role === "rodPlate" ? state.chargeMagnitude : 0;
       return Math.abs(rodBoundaryPotentialAt(group, boundaryIndex) - target);
     }));
-    const name = group.kind === "ball" ? "BALL_ELECTRODE" : "TIP_ELECTRODE";
-    return `${name.padEnd(14)} N=${String(group.boundaries.length).padStart(3)}  A=${group.boundaries.length}x${group.boundaries.length}  max|Φ-V|=${maxError.toExponential(2)}`;
+    return {
+      name: group.kind === "ball" ? "BALL_ELECTRODE" : "TIP_ELECTRODE",
+      points: group.boundaries.length,
+      matrix: `${group.boundaries.length}×${group.boundaries.length}`,
+      error: maxError.toExponential(2)
+    };
   });
   const lineCount = solution.groups.reduce((sum, group) => sum + group.seeds.length, 0);
-  return [
-    "STATIC FIELD SOLVER :: DIRICHLET_BEM",
-    "scene = lightning_rod_comparison",
-    "",
-    "[Boundary Conditions]",
-    "Φ(r_i) = V_plate,    r_i ∈ charged plate",
-    "Φ(r_i) = 0,          r_i ∈ metal conductor",
-    "E(r) = -∇Φ(r)",
-    "d r / d s = E(r) / |E(r)|",
-    "",
-    "[Discrete System]",
-    "Σ_j q_j · G(r_i, r_j) = V_i",
-    "G(r_i, r_j) = -ln |r_i - r_j|",
-    "A q = V",
-    "",
-    "[Runtime Matrices]",
-    ...groupLines,
-    `field_lines = ${lineCount}`,
-    `charge_scale = ${state.chargeMagnitude.toFixed(2)}`,
-    "",
-    "[Core Source Extract]",
-    "function solveRodBemGroup(group, V0) {",
-    "  A[i][j] = G(boundary[i], boundary[j]);",
-    "  V[i] = role(i)==plate ? V0 : 0;",
-    "  q = solveLinearSystem(A, V);",
-    "}",
-    "",
-    "function traceRodFieldPath(seed, group) {",
-    "  while (!inside_conductor) {",
-    "    E = rodFieldAt(point, group);",
-    "    point += normalize(E) * ds;",
-    "  }",
-    "}"
-  ].join("\n");
+  return `
+    <div class="console-topline">
+      <span><span class="live-dot"></span>STATIC FIELD SOLVER :: DIRICHLET_BEM</span>
+      <span class="console-chip">scene: lightning_rod</span>
+    </div>
+    <div class="metric-grid">
+      ${metrics.map(metric => `
+        <div class="metric-cell">
+          <div class="metric-label">${metric.name}</div>
+          <div class="metric-value">${metric.points} pts · ${metric.matrix}</div>
+        </div>
+      `).join("")}
+      <div class="metric-cell">
+        <div class="metric-label">max boundary residual</div>
+        <div class="metric-value">${metrics.map(metric => metric.error).join(" / ")}</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-label">field traces</div>
+        <div class="metric-value">${lineCount} streamlines</div>
+      </div>
+    </div>
+    <div class="console-block">
+      <div class="console-block-title">BOUNDARY CONDITIONS</div>
+      <div class="formula-stack">
+        <div class="formula-line">Φ(r<sub>i</sub>) = V<sub>plate</sub>, &nbsp; r<sub>i</sub> ∈ charged plate</div>
+        <div class="formula-line">Φ(r<sub>i</sub>) = 0, &nbsp; r<sub>i</sub> ∈ metal conductor</div>
+        <div class="formula-line">E(r) = −∇Φ(r), &nbsp; d r / d s = E(r) / |E(r)|</div>
+      </div>
+    </div>
+    <div class="console-block">
+      <div class="console-block-title">BEM DISCRETIZATION</div>
+      <div class="formula-stack">
+        <div class="formula-line">Σ<sub>j</sub> q<sub>j</sub> · G(r<sub>i</sub>, r<sub>j</sub>) = V<sub>i</sub></div>
+        <div class="formula-line">G(r<sub>i</sub>, r<sub>j</sub>) = −ln |r<sub>i</sub> − r<sub>j</sub>|</div>
+        <div class="formula-line"><code>A q = V</code></div>
+      </div>
+    </div>
+    <div class="console-block">
+      <div class="console-block-title">RUNTIME MATRICES</div>
+      ${metrics.map(metric => `
+        <div class="matrix-row"><span>${metric.name}</span><span>N=${metric.points}, A=${metric.matrix}, ε=${metric.error}</span></div>
+      `).join("")}
+      <div class="matrix-row"><span>charge_scale</span><span>${state.chargeMagnitude.toFixed(2)}</span></div>
+    </div>
+    <div class="console-block">
+      <div class="console-block-title">CORE SOURCE EXTRACT</div>
+      <pre class="code-panel"><span class="code-keyword">function</span> <span class="code-fn">solveRodBemGroup</span>(group, V0) {
+  A[i][j] = G(boundary[i], boundary[j]);
+  V[i] = role(i) == plate ? V0 : <span class="code-num">0</span>;
+  q = solveLinearSystem(A, V);
 }
 
-function makeGenericSolverConsoleText() {
+<span class="code-keyword">function</span> <span class="code-fn">traceRodFieldPath</span>(seed, group) {
+  E = rodFieldAt(point, group);
+  point += normalize(E) * ds;
+}</pre>
+    </div>
+    <div class="console-block">solver ready<span class="console-cursor"></span></div>
+  `;
+}
+
+function makeGenericSolverConsoleHtml() {
   const solution = getBemSolution();
   const n = solution.boundaries.length;
   const total = solution.charges.reduce((sum, value) => sum + value, 0);
-  return [
-    "STATIC FIELD SOLVER :: BEM",
-    `scene = ${state.scene}`,
-    "",
-    "[Boundary Conditions]",
-    "Φ(r_i) = constant on conductor",
-    "Σ_i q_i = Q_net",
-    "E(r) = -∇Φ(r)",
-    "",
-    "[Discrete System]",
-    "Σ_j q_j · G(r_i, r_j) - Φ_c = -Φ_source(r_i)",
-    "G(r_i, r_j) = -ln |r_i - r_j|",
-    "",
-    "[Runtime Check]",
-    `boundary_points = ${n}`,
-    `augmented_matrix = ${n + 1}x${n + 1}`,
-    `Σ q_i = ${total.toExponential(3)}`
-  ].join("\n");
+  return `
+    <div class="console-topline">
+      <span><span class="live-dot"></span>STATIC FIELD SOLVER :: BEM</span>
+      <span class="console-chip">scene: ${state.scene}</span>
+    </div>
+    <div class="metric-grid">
+      <div class="metric-cell">
+        <div class="metric-label">boundary points</div>
+        <div class="metric-value">${n}</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-label">augmented matrix</div>
+        <div class="metric-value">${n + 1}×${n + 1}</div>
+      </div>
+      <div class="metric-cell">
+        <div class="metric-label">net charge</div>
+        <div class="metric-value">${total.toExponential(3)}</div>
+      </div>
+    </div>
+    <div class="console-block">
+      <div class="console-block-title">CONSTRAINTS</div>
+      <div class="formula-stack">
+        <div class="formula-line">Φ(r<sub>i</sub>) = constant on conductor</div>
+        <div class="formula-line">Σ<sub>i</sub> q<sub>i</sub> = Q<sub>net</sub></div>
+        <div class="formula-line">E(r) = −∇Φ(r)</div>
+      </div>
+    </div>
+    <div class="console-block">
+      <div class="console-block-title">DISCRETE SYSTEM</div>
+      <div class="formula-stack">
+        <div class="formula-line">Σ<sub>j</sub> q<sub>j</sub> · G(r<sub>i</sub>, r<sub>j</sub>) − Φ<sub>c</sub> = −Φ<sub>source</sub>(r<sub>i</sub>)</div>
+        <div class="formula-line">G(r<sub>i</sub>, r<sub>j</sub>) = −ln |r<sub>i</sub> − r<sub>j</sub>|</div>
+      </div>
+    </div>
+    <div class="console-block">solver ready<span class="console-cursor"></span></div>
+  `;
 }
 
 function getStudentChecks() {

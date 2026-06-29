@@ -342,11 +342,41 @@ canvas {
 }
 
 .solver-console {
+  position: relative;
+  overflow: hidden;
   margin-top: 12px;
   padding: 12px;
-  background: #07120d;
-  border: 1px solid rgba(32, 190, 120, 0.42);
-  box-shadow: inset 0 0 28px rgba(14, 165, 92, 0.14);
+  background:
+    linear-gradient(180deg, rgba(34, 197, 94, 0.08), rgba(34, 197, 94, 0) 28%),
+    #04110b;
+  border: 1px solid rgba(68, 255, 164, 0.46);
+  box-shadow: inset 0 0 32px rgba(14, 165, 92, 0.18), 0 12px 28px rgba(7, 18, 13, 0.18);
+}
+
+.solver-console::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    180deg,
+    rgba(143, 247, 184, 0.04) 0,
+    rgba(143, 247, 184, 0.04) 1px,
+    transparent 1px,
+    transparent 7px
+  );
+}
+
+.solver-console::after {
+  content: "";
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  top: -20%;
+  height: 44px;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(126, 247, 178, 0.10), transparent);
+  animation: consoleScan 5.5s linear infinite;
 }
 
 .console-option {
@@ -363,13 +393,173 @@ canvas {
 }
 
 #solverConsoleText {
+  position: relative;
+  z-index: 1;
   max-height: 390px;
   margin: 0;
   overflow: auto;
-  color: #8ff7b8;
+  color: #b8ffd2;
   text-shadow: 0 0 8px rgba(34, 197, 94, 0.24);
   font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  white-space: pre-wrap;
+}
+
+.console-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: #dbffe9;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 7px;
+  background: #22c55e;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.88);
+  animation: livePulse 1.4s ease-in-out infinite;
+}
+
+.console-chip {
+  padding: 2px 6px;
+  border: 1px solid rgba(126, 247, 178, 0.34);
+  color: #7ef7b2;
+  font-size: 11px;
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+
+.metric-cell {
+  padding: 7px;
+  border: 1px solid rgba(126, 247, 178, 0.20);
+  background: rgba(3, 28, 16, 0.72);
+}
+
+.metric-label {
+  color: #72d99e;
+  font-size: 10px;
+}
+
+.metric-value {
+  margin-top: 2px;
+  color: #e5fff0;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.console-block {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(126, 247, 178, 0.18);
+}
+
+.console-block-title {
+  margin-bottom: 6px;
+  color: #4ade80;
+  font-weight: 850;
+}
+
+.formula-stack {
+  display: grid;
+  gap: 5px;
+}
+
+.formula-line {
+  padding: 5px 7px;
+  background: rgba(5, 33, 20, 0.70);
+  border-left: 2px solid rgba(74, 222, 128, 0.72);
+  color: #d8ffe7;
+  font-family: "Times New Roman", ui-serif, serif;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.formula-line code {
+  color: #9fffc4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.matrix-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 5px 0;
+  color: #caffe0;
+  border-bottom: 1px solid rgba(126, 247, 178, 0.10);
+}
+
+.matrix-row:last-child {
+  border-bottom: 0;
+}
+
+.code-panel {
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.28);
+  color: #c7ffd9;
+  font: 11px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.code-keyword {
+  color: #60a5fa;
+}
+
+.code-fn {
+  color: #facc15;
+}
+
+.code-num {
+  color: #f0abfc;
+}
+
+.console-cursor {
+  display: inline-block;
+  width: 7px;
+  height: 13px;
+  margin-left: 4px;
+  background: #7ef7b2;
+  vertical-align: -2px;
+  animation: cursorBlink 1s steps(2, start) infinite;
+}
+
+@keyframes livePulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes cursorBlink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  46%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes consoleScan {
+  from {
+    transform: translateY(-90px);
+  }
+  to {
+    transform: translateY(520px);
+  }
 }
 
 @media (max-width: 1100px) {
