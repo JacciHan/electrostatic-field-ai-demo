@@ -319,6 +319,59 @@ canvas {
   line-height: 1.65;
 }
 
+.solver-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.solver-heading h2 {
+  margin-bottom: 0;
+}
+
+.console-toggle {
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid rgba(15, 118, 110, 0.36);
+  background: #e8f5f3;
+  color: #0b5f59;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.solver-console {
+  margin-top: 12px;
+  padding: 12px;
+  background: #07120d;
+  border: 1px solid rgba(32, 190, 120, 0.42);
+  box-shadow: inset 0 0 28px rgba(14, 165, 92, 0.14);
+}
+
+.console-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: #7ef7b2;
+  font: 700 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.console-option input {
+  accent-color: #22c55e;
+}
+
+#solverConsoleText {
+  max-height: 390px;
+  margin: 0;
+  overflow: auto;
+  color: #8ff7b8;
+  text-shadow: 0 0 8px rgba(34, 197, 94, 0.24);
+  font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 1100px) {
   .shell {
     grid-template-columns: 1fr;

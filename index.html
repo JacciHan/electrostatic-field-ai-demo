@@ -100,9 +100,23 @@
         <h2>模型自检</h2>
         <ul id="physicsChecks" class="check-list"></ul>
       </section>
+
+      <section class="solver-section">
+        <div class="solver-heading">
+          <h2>数值求解控制台</h2>
+          <button id="solverToggle" class="console-toggle" type="button" aria-expanded="false">打开</button>
+        </div>
+        <div id="solverConsole" class="solver-console" hidden>
+          <label class="console-option">
+            <input id="showBoundarySamples" type="checkbox">
+            <span>边界采样点</span>
+          </label>
+          <pre id="solverConsoleText"></pre>
+        </div>
+      </section>
     </aside>
   </main>
 
-  <script src="./app.js?v=lightning-rod-trim-edge-lines"></script>
+  <script src="./app.js?v=solver-console"></script>
 </body>
 </html>

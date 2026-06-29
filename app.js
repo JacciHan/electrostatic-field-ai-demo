@@ -8,6 +8,8 @@ const state = {
   showLines: true,
   showEquipotentials: true,
   showLabels: true,
+  showSolverConsole: false,
+  showBoundarySamples: false,
   chargeSign: 1,
   chargeMagnitude: 1,
   charge: { x: 0.23, y: 0.5 },
@@ -116,6 +118,10 @@ const els = {
   showLines: document.querySelector("#showLines"),
   showEquipotentials: document.querySelector("#showEquipotentials"),
   showLabels: document.querySelector("#showLabels"),
+  solverToggle: document.querySelector("#solverToggle"),
+  solverConsole: document.querySelector("#solverConsole"),
+  solverConsoleText: document.querySelector("#solverConsoleText"),
+  showBoundarySamples: document.querySelector("#showBoundarySamples"),
   positiveBtn: document.querySelector("#positiveBtn"),
   negativeBtn: document.querySelector("#negativeBtn"),
   chargeAmount: document.querySelector("#chargeAmount"),
@@ -723,11 +729,97 @@ function updateText() {
     : summaries[state.scene];
 
   renderList(els.studentChecks, getStudentChecks());
+  updateSolverConsole();
 }
 
 function updateChargeAmountLabel() {
   if (!els.chargeAmountValue) return;
   els.chargeAmountValue.textContent = state.chargeMagnitude.toFixed(2);
+}
+
+function updateSolverConsole() {
+  if (!els.solverToggle || !els.solverConsole || !els.solverConsoleText) return;
+  els.solverToggle.textContent = state.showSolverConsole ? "收起" : "打开";
+  els.solverToggle.setAttribute("aria-expanded", String(state.showSolverConsole));
+  els.solverConsole.hidden = !state.showSolverConsole;
+  if (els.showBoundarySamples) {
+    els.showBoundarySamples.checked = state.showBoundarySamples;
+  }
+  if (!state.showSolverConsole) return;
+  els.solverConsoleText.textContent = state.scene === "rod"
+    ? makeRodSolverConsoleText()
+    : makeGenericSolverConsoleText();
+}
+
+function makeRodSolverConsoleText() {
+  const solution = getRodBemSolution();
+  const groupLines = solution.groups.map((group) => {
+    const maxError = Math.max(...group.boundaries.map((boundary, boundaryIndex) => {
+      const target = boundary.role === "rodPlate" ? state.chargeMagnitude : 0;
+      return Math.abs(rodBoundaryPotentialAt(group, boundaryIndex) - target);
+    }));
+    const name = group.kind === "ball" ? "BALL_ELECTRODE" : "TIP_ELECTRODE";
+    return `${name.padEnd(14)} N=${String(group.boundaries.length).padStart(3)}  A=${group.boundaries.length}x${group.boundaries.length}  max|Φ-V|=${maxError.toExponential(2)}`;
+  });
+  const lineCount = solution.groups.reduce((sum, group) => sum + group.seeds.length, 0);
+  return [
+    "STATIC FIELD SOLVER :: DIRICHLET_BEM",
+    "scene = lightning_rod_comparison",
+    "",
+    "[Boundary Conditions]",
+    "Φ(r_i) = V_plate,    r_i ∈ charged plate",
+    "Φ(r_i) = 0,          r_i ∈ metal conductor",
+    "E(r) = -∇Φ(r)",
+    "d r / d s = E(r) / |E(r)|",
+    "",
+    "[Discrete System]",
+    "Σ_j q_j · G(r_i, r_j) = V_i",
+    "G(r_i, r_j) = -ln |r_i - r_j|",
+    "A q = V",
+    "",
+    "[Runtime Matrices]",
+    ...groupLines,
+    `field_lines = ${lineCount}`,
+    `charge_scale = ${state.chargeMagnitude.toFixed(2)}`,
+    "",
+    "[Core Source Extract]",
+    "function solveRodBemGroup(group, V0) {",
+    "  A[i][j] = G(boundary[i], boundary[j]);",
+    "  V[i] = role(i)==plate ? V0 : 0;",
+    "  q = solveLinearSystem(A, V);",
+    "}",
+    "",
+    "function traceRodFieldPath(seed, group) {",
+    "  while (!inside_conductor) {",
+    "    E = rodFieldAt(point, group);",
+    "    point += normalize(E) * ds;",
+    "  }",
+    "}"
+  ].join("\n");
+}
+
+function makeGenericSolverConsoleText() {
+  const solution = getBemSolution();
+  const n = solution.boundaries.length;
+  const total = solution.charges.reduce((sum, value) => sum + value, 0);
+  return [
+    "STATIC FIELD SOLVER :: BEM",
+    `scene = ${state.scene}`,
+    "",
+    "[Boundary Conditions]",
+    "Φ(r_i) = constant on conductor",
+    "Σ_i q_i = Q_net",
+    "E(r) = -∇Φ(r)",
+    "",
+    "[Discrete System]",
+    "Σ_j q_j · G(r_i, r_j) - Φ_c = -Φ_source(r_i)",
+    "G(r_i, r_j) = -ln |r_i - r_j|",
+    "",
+    "[Runtime Check]",
+    `boundary_points = ${n}`,
+    `augmented_matrix = ${n + 1}x${n + 1}`,
+    `Σ q_i = ${total.toExponential(3)}`
+  ].join("\n");
 }
 
 function getStudentChecks() {
@@ -802,6 +894,7 @@ function draw() {
     if (hasPointCharge()) drawPointCharge();
     if (state.showLabels) drawLabels();
     updatePhysicsDiagnostics(performance.now() - startedAt);
+    updateSolverConsole();
     if (needsVisualAnimation()) requestDraw();
   } catch (error) {
     console.error(error);
@@ -930,9 +1023,11 @@ function drawLightningRodScene(startedAt) {
   if (!state.prediction && state.showEquipotentials) drawLightningPotentialGuides();
   if (!state.prediction && state.showLines) drawLightningIllustrationFieldLines();
   drawLightningApparatus();
+  if (!state.prediction && state.showBoundarySamples) drawRodBoundarySamples();
   if (!state.prediction && state.showCharges) drawLightningSurfaceCharges();
   if (state.showLabels) drawLabels();
   updateLightningDiagnostics(performance.now() - startedAt);
+  updateSolverConsole();
 }
 
 function drawDisk(cx, cy, r) {
@@ -1162,6 +1257,20 @@ function drawLightningSurfaceCharges() {
       drawSurfaceDot(p.x, p.y, q > 0 ? 1 : -1, (1.8 + Math.min(1.05, strength) * 4.4) * radiusBoost);
     });
   });
+}
+
+function drawRodBoundarySamples() {
+  ctx.save();
+  getRodBemSolution().groups.forEach((group) => {
+    group.boundaries.forEach((boundary, index) => {
+      if (index % 2 !== 0) return;
+      ctx.beginPath();
+      ctx.arc(sx(boundary.x), sy(boundary.y), boundary.role === "rodPlate" ? 2.1 : 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = boundary.role === "rodPlate" ? "rgba(34, 197, 94, 0.88)" : "rgba(20, 184, 166, 0.82)";
+      ctx.fill();
+    });
+  });
+  ctx.restore();
 }
 
 function drawChargeMark(x, y, sign, size) {
@@ -1927,6 +2036,16 @@ els.showLabels.addEventListener("change", () => {
   draw();
 });
 
+els.solverToggle.addEventListener("click", () => {
+  state.showSolverConsole = !state.showSolverConsole;
+  updateSolverConsole();
+});
+
+els.showBoundarySamples.addEventListener("change", () => {
+  state.showBoundarySamples = els.showBoundarySamples.checked;
+  draw();
+});
+
 els.positiveBtn.addEventListener("click", () => {
   state.chargeSign = 1;
   els.positiveBtn.classList.add("active");
@@ -2025,5 +2144,14 @@ const queryX = Number(params.get("x"));
 const queryY = Number(params.get("y"));
 if (params.has("x") && params.has("y") && Number.isFinite(queryX) && Number.isFinite(queryY)) {
   state.charge = constrainCharge({ x: queryX, y: queryY });
+  draw();
+}
+if (params.get("console") === "1") {
+  state.showSolverConsole = true;
+  updateSolverConsole();
+}
+if (params.get("samples") === "1") {
+  state.showBoundarySamples = true;
+  updateSolverConsole();
   draw();
 }
